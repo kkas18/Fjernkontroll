@@ -1,4 +1,12 @@
 /* Fjern – et nøkternt, taktilt verktøy. Alle farger, radier og avstander kommer fra tokens under. */
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/manrope-latin-wght.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
 
@@ -6,14 +14,27 @@
   --surface: #17181b;
   --raised: #212226;
   --raised-hi: #2b2c31;
+  /* --line er bare for inndatafelt (WCAG 1.4.11 krever 3:1). Alle andre flater bruker --edge. */
   --line: #606166;
+  --edge: rgb(255 255 255 / 0.07);
+  --hairline: rgb(255 255 255 / 0.06);
   --text: #ececed;
   --muted: #a1a2a8;
+  --focus: #f4f4f5;
+  /* Aksenten er forbeholdt OK og primærhandlinger. */
   --accent: #ff6b2c;
   --on-accent: #1c0b02;
   --ok: #3ecf8e;
+  --ok-tint: rgb(62 207 142 / 0.2);
+  --warn: #f5b041;
   --err: #ff6159;
+  --err-tint: rgb(255 97 89 / 0.2);
+  --danger-soft: rgb(255 97 89 / 0.12);
   --on-danger: #1d0403;
+  --star: #f0c233;
+  --press-tint: rgb(255 255 255 / 0.08);
+
+  --tap: 44px;
 
   --r-s: 8px;
   --r-m: 14px;
@@ -31,11 +52,11 @@
   --t-m: 16px;
   --t-l: 20px;
   --t-xl: 28px;
+  --font: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   --press: 120ms;
   --bevel: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 1px 2px rgb(0 0 0 / 0.45);
-  /* Knapper med ikon eller tekst trenger ikke 3:1-kant (WCAG 1.4.11); de får en svak kant i stedet. */
-  --edge: rgb(255 255 255 / 0.06);
+  --lift: 0 8px 24px rgb(0 0 0 / 0.35);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -45,14 +66,14 @@ body {
   min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
-  font: 400 var(--t-m)/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 500 var(--t-m)/1.45 var(--font);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
 button, input { font: inherit; color: inherit; }
 button { cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 [hidden] { display: none !important; }
 html[data-platform="android"] .web-only { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -90,11 +111,11 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   text-align: left;
 }
 .device-text { min-width: 0; display: flex; flex-direction: column; }
-.device-name { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-meta { font-size: var(--t-xs); color: var(--muted); }
+.device-name { font-size: 19px; font-weight: 750; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-meta { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
 .led { width: 10px; height: 10px; flex: none; border-radius: var(--r-full); background: var(--line); }
 .led[data-state="ok"] { background: var(--ok); }
-.led[data-state="busy"] { background: var(--accent); animation: blink 1.2s ease-in-out infinite; }
+.led[data-state="busy"] { background: var(--warn); animation: blink 1.2s ease-in-out infinite; }
 .led[data-state="err"] { background: var(--err); }
 @keyframes blink { 50% { opacity: 0.35; } }
 .bar-actions { display: flex; gap: var(--s-2); }
@@ -113,6 +134,9 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 }
 .icon-button:active { transform: scale(0.94); background: var(--raised-hi); }
 .icon-button:disabled { opacity: 0.4; cursor: default; transform: none; }
+/* Strøm er den mest inngripende handlingen og skiller seg ut fra alt annet i toppen. */
+.icon-button.power { color: var(--err); background: var(--danger-soft); border-color: rgb(255 97 89 / 0.28); box-shadow: none; }
+.icon-button.power:active { background: rgb(255 97 89 / 0.2); }
 
 /* Statuslinje: vises bare når noe krever oppmerksomhet */
 .notice {
@@ -128,16 +152,15 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   font-size: var(--t-s);
 }
 .notice p { flex: 1; }
-.notice[data-tone="busy"] { border-left-color: var(--accent); }
+.notice[data-tone="busy"] { border-left-color: var(--warn); }
 .notice[data-tone="err"] { border-left-color: var(--err); }
 
 /* Fjernkontrollen: skyves ned mot tommelen */
-.remote { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-2), 1.5dvh, var(--s-4)); padding-top: var(--s-2); }
+/* Mellomrommene vokser med skjermhøyden, så høye telefoner ikke får et tomt felt midt på. */
+.remote { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-3), 2.2dvh, 22px); padding-top: var(--s-3); }
 
-/* Favoritter står fast rett over kontrollene, med ekte ikoner fra TV-en */
 /* Favorittene står rett over kontrollene, så alt er samlet i én blokk ved tommelen. */
-.apps { flex: 0 0 auto; margin-top: auto; padding-bottom: var(--s-1); display: flex; flex-direction: column; }
-.apps-title { font-size: var(--t-s); font-weight: 600; color: var(--muted); }
+.apps { flex: 0 0 auto; margin-top: auto; display: flex; flex-direction: column; }
 .fav-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-3) var(--s-2); }
 .fav {
   min-width: 0;
@@ -152,7 +175,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   transition-duration: var(--press);
 }
 .fav:active { transform: scale(0.94); }
-.fav-label { max-width: 100%; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-label { max-width: 100%; font-size: var(--t-xs); font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .app-icon {
   position: relative;
@@ -162,16 +185,17 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   overflow: hidden;
   border-radius: var(--r-m);
   background: var(--app-color, var(--raised));
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0) 60%);
   color: #fff;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 1px 2px rgb(0 0 0 / 0.4);
 }
-.app-icon.m { width: 46px; height: 46px; border-radius: 12px; font-size: var(--t-s); }
+.app-icon.m { width: clamp(46px, 6.4dvh, 54px); height: clamp(46px, 6.4dvh, 54px); border-radius: 14px; font-size: 15px; }
 .app-icon.s { width: 40px; height: 40px; border-radius: 10px; font-size: var(--t-xs); }
 .app-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .app-icon.has-image { color: transparent; }
-.app-icon.all { background: var(--raised); color: var(--muted); }
+.app-icon.all { background-color: var(--raised); color: var(--muted); }
 .fav.is-sent .app-icon { box-shadow: inset 0 0 0 2px var(--ok); }
 .fav.is-failed .app-icon { box-shadow: inset 0 0 0 2px var(--err); }
 
@@ -195,7 +219,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .app-open span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-open:active { background: var(--raised); }
 .app-star { width: 48px; height: 48px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; color: var(--muted); }
-.app-star[aria-pressed="true"] { color: var(--accent); }
+.app-star[aria-pressed="true"] { color: var(--star); }
 .app-star[aria-pressed="true"] use { fill: currentColor; }
 
 .segmented-bar button, .rocker button, .dir, .ok {
@@ -203,26 +227,31 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   transition-duration: var(--press);
   transition-timing-function: ease-out;
 }
-/* Snarveier: Kilde, 123, Innstillinger, Mer */
-.shortcuts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }
-.shortcut {
+
+/* Hierarki, fra lettest til tyngst: verktøylinje (uten flate) → avspilling (rolig flate) →
+   meny (hevet) → styrekorset (hevet, størst, med aksent). */
+
+/* Verktøylinje: Kilde, 123, Oppsett, Mer. Uten flate, så den ikke konkurrerer med kontrollene. */
+.toolbar { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s-1); padding: 0 var(--s-1); border-top: 1px solid var(--hairline); padding-top: var(--s-2); }
+.tool {
   min-width: 0;
-  height: 40px;
+  min-height: var(--tap);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 0 var(--s-1);
+  gap: 2px;
+  padding: var(--s-1);
   border: 0;
-  border-radius: var(--r-full);
-  background: var(--surface);
+  border-radius: var(--r-m);
+  background: none;
   color: var(--text);
   transition-property: transform, background-color;
   transition-duration: var(--press);
 }
-.shortcut span { min-width: 0; font-size: var(--t-xs); font-weight: 500; letter-spacing: -0.01em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.shortcut .icon { width: 17px; height: 17px; }
-.shortcut:active { transform: scale(0.96); background: var(--raised); }
+.tool span { max-width: 100%; font-size: var(--t-xs); font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool .icon { width: 20px; height: 20px; }
+.tool:active { transform: scale(0.96); background: var(--press-tint); }
 
 /* Sammenhengende knappegrupper, som på en fysisk fjernkontroll */
 .segmented-bar {
@@ -236,30 +265,34 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   overflow: hidden;
 }
 .segmented-bar button {
-  min-height: 48px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   border: 0;
-  border-left: 1px solid rgb(255 255 255 / 0.05);
+  border-left: 1px solid var(--hairline);
   background: none;
-  font-size: var(--t-xs);
+  font-size: var(--t-s);
+  font-weight: 600;
   color: var(--muted);
 }
 .segmented-bar button:first-child { border-left: 0; }
 .segmented-bar button .icon { color: var(--text); }
 .segmented-bar button:active { background: var(--raised-hi); }
 /* Avspilling er sekundært: lavere og roligere */
-.segmented-bar.transport { background: var(--surface); box-shadow: none; }
-.segmented-bar.transport button { min-height: 44px; }
+.segmented-bar.transport { background: var(--surface); border-color: transparent; box-shadow: none; }
+.segmented-bar.transport button { min-height: 48px; border-left-color: transparent; }
+.segmented-bar.transport button .icon { color: var(--muted); }
+.segmented-bar.transport button:active { background: var(--raised); }
 .segmented-bar.transport .primary-play .icon { width: 26px; height: 26px; }
 
-.cluster { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; gap: var(--s-2); }
+.cluster { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; align-items: center; gap: var(--s-2); }
 
 .rocker {
   height: 100%;
-  min-height: 156px;
+  min-height: 168px;
+  max-height: 260px;
   display: grid;
   grid-template-rows: 1fr auto 1fr;
   border-radius: var(--r-full);
@@ -271,12 +304,12 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .rocker button { border: 0; background: none; display: grid; place-items: center; min-height: 56px; }
 .rocker button:active { background: var(--raised-hi); }
 .rocker.is-unused { visibility: hidden; }
-.rocker-label { text-align: center; font-size: var(--t-xs); color: var(--muted); padding: var(--s-1) 0; }
+.rocker-label { text-align: center; font-size: var(--t-xs); font-weight: 750; letter-spacing: 0.08em; color: var(--text); opacity: 0.8; padding: var(--s-1) 0; }
 
 .dpad {
   position: relative;
   width: 100%;
-  max-width: min(264px, 32dvh);
+  max-width: min(300px, 40dvh);
   aspect-ratio: 1;
   justify-self: center;
   border-radius: var(--r-full);
@@ -285,16 +318,28 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   box-shadow: var(--bevel);
   overflow: hidden;
 }
-.dir { position: absolute; border: 0; background: none; display: grid; place-items: center; }
+/* Hver retning er en kakebit av platen (clip-path), så trykk og tilbakemelding følger den runde formen.
+   Treffflaten klippes også, og OK ligger over midten. */
+.dpad::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(45deg, transparent calc(50% - 0.5px), var(--hairline) 50%, transparent calc(50% + 0.5px)),
+    linear-gradient(-45deg, transparent calc(50% - 0.5px), var(--hairline) 50%, transparent calc(50% + 0.5px));
+  pointer-events: none;
+}
+.dir { position: absolute; inset: 0; border: 0; background: none; display: flex; align-items: center; justify-content: center; }
 .dir:active { background: var(--raised-hi); }
-.dir.up, .dir.down { left: 30%; width: 40%; height: 30%; }
-.dir.left, .dir.right { top: 30%; height: 40%; width: 30%; }
-.dir.up { top: 0; }
-.dir.down { bottom: 0; }
-.dir.left { left: 0; }
-.dir.right { right: 0; }
+.dir:focus-visible { outline: none; background: var(--press-tint); }
+.dir .icon { width: 26px; height: 26px; }
+.dir.up { clip-path: polygon(50% 50%, 0 0, 100% 0); align-items: flex-start; padding-top: 10%; }
+.dir.down { clip-path: polygon(50% 50%, 0 100%, 100% 100%); align-items: flex-end; padding-bottom: 10%; }
+.dir.left { clip-path: polygon(50% 50%, 0 0, 0 100%); justify-content: flex-start; padding-left: 10%; }
+.dir.right { clip-path: polygon(50% 50%, 100% 0, 100% 100%); justify-content: flex-end; padding-right: 10%; }
 .ok {
   position: absolute;
+  z-index: 1;
   inset: 30%;
   border-radius: var(--r-full);
   background: var(--accent);
@@ -307,13 +352,16 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 }
 .ok:active { transform: scale(0.95); }
 
-/* Tilbakemelding per knapp */
+/* Tilbakemelding per knapp: ring på frittstående knapper, farget flate inne i grupper
+   (styrekors, ruller, knapperader), der en ring ville blitt klippet eller firkantet. */
 .is-sent { box-shadow: inset 0 0 0 2px var(--ok) !important; }
 .is-failed { box-shadow: inset 0 0 0 2px var(--err) !important; }
+.dir.is-sent, .rocker .is-sent, .segmented-bar .is-sent, .tool.is-sent { box-shadow: none !important; background: var(--ok-tint) !important; }
+.dir.is-failed, .rocker .is-failed, .segmented-bar .is-failed, .tool.is-failed { box-shadow: none !important; background: var(--err-tint) !important; }
 
 /* Tomtilstand */
 .empty { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: var(--s-3); padding-bottom: var(--s-4); }
-.empty h1 { font-size: var(--t-xl); font-weight: 650; }
+.empty h1 { font-size: var(--t-xl); font-weight: 800; letter-spacing: -0.03em; }
 .empty p { color: var(--muted); }
 .stack { display: grid; gap: var(--s-2); margin-top: var(--s-3); }
 .stack.two { grid-template-columns: 1fr 1fr; }
@@ -327,17 +375,19 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   padding: 0 var(--s-4);
   border-radius: var(--r-m);
   background: var(--raised);
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   box-shadow: var(--bevel);
-  font-weight: 600;
+  font-weight: 700;
   transition-property: transform, background-color;
   transition-duration: var(--press);
 }
-.button:active { transform: scale(0.98); }
+.button:active { transform: scale(0.98); background-color: var(--raised-hi); }
 .button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.button.primary:active { background: #f25d1d; }
 .button.danger { background: var(--err); border-color: var(--err); color: var(--on-danger); }
+.button.danger:active { background: #f04f47; }
 .button:disabled { opacity: 0.55; cursor: default; }
-.button.small { min-height: 40px; padding: 0 var(--s-3); font-size: var(--t-s); flex: none; }
+.button.small { min-height: var(--tap); padding: 0 var(--s-3); font-size: var(--t-s); flex: none; }
 
 /* Ark (dialoger) */
 .sheet {
@@ -345,21 +395,35 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   max-width: 480px;
   max-height: 88dvh;
   margin: auto auto 0;
-  padding: var(--s-4) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom));
-  border: 1px solid var(--line);
+  padding: var(--s-2) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom));
+  border: 1px solid var(--edge);
   border-bottom: 0;
-  border-radius: var(--r-m) var(--r-m) 0 0;
+  border-radius: 20px 20px 0 0;
   background: var(--surface);
   color: var(--text);
+  box-shadow: 0 -12px 40px rgb(0 0 0 / 0.45);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.sheet[open] { animation: rise 180ms ease-out; }
+.sheet[open] { animation: rise 220ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+.sheet[open]::backdrop { animation: fade-in 220ms ease-out; }
+.sheet.is-closing { animation: sink 180ms ease-in forwards; }
+.sheet.is-closing::backdrop { animation: fade-out 180ms ease-in forwards; }
+.sheet.is-dragging { animation: none; transition: none; }
+.sheet.is-settling { transition: transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1); }
 .sheet::backdrop { background: rgb(0 0 0 / 0.6); }
-@keyframes rise { from { transform: translateY(24px); opacity: 0; } }
-.sheet-head { display: flex; align-items: center; justify-content: space-between; min-height: 48px; margin-bottom: var(--s-3); }
-.sheet h2 { font-size: var(--t-l); font-weight: 650; }
+@keyframes rise { from { transform: translateY(32px); opacity: 0; } }
+@keyframes sink { to { transform: translateY(40px); opacity: 0; } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+/* Dra-håndtak: arket kan dras ned for å lukkes (se app.js). */
+.sheet-grip { height: 20px; margin: 0 calc(-1 * var(--s-4)); display: grid; place-items: center; touch-action: none; cursor: grab; }
+.sheet-grip::before { content: ""; width: 36px; height: 4px; border-radius: var(--r-full); background: rgb(255 255 255 / 0.22); }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: 48px; margin-bottom: var(--s-3); touch-action: none; }
+.sheet h2 { font-size: var(--t-l); font-weight: 800; letter-spacing: -0.02em; }
+.sheet-head .icon-button { box-shadow: none; color: var(--muted); }
 .hint { color: var(--muted); font-size: var(--t-s); margin-top: var(--s-2); }
-.list-title { font-size: var(--t-s); font-weight: 600; color: var(--muted); margin: var(--s-5) 0 var(--s-2); }
+.list-title { font-size: var(--t-xs); font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: var(--s-5) 0 var(--s-2); }
 
 .device-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
 .device-item { display: flex; align-items: stretch; gap: var(--s-2); }
@@ -373,16 +437,19 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   padding: var(--s-2) var(--s-4);
   border-radius: var(--r-m);
   background: var(--raised);
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
+  box-shadow: var(--bevel);
   text-align: left;
 }
-.device-select[aria-current="true"] { border-color: var(--accent); }
-.device-select strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-select:active { background: var(--raised-hi); }
+.device-select[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--ok), var(--bevel); }
+.device-select strong { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .device-select small { color: var(--muted); font-size: var(--t-xs); }
-.device-remove { width: 52px; border-radius: var(--r-m); background: none; border: 1px solid var(--line); color: var(--muted); display: grid; place-items: center; }
+.device-remove { width: 52px; border-radius: var(--r-m); background: var(--raised); border: 1px solid var(--edge); color: var(--muted); display: grid; place-items: center; }
+.device-remove:active { background: var(--raised-hi); color: var(--text); }
 .list-empty { color: var(--muted); font-size: var(--t-s); padding: var(--s-2) 0; }
 
-.help { margin-top: var(--s-5); border-top: 1px solid var(--line); padding-top: var(--s-3); font-size: var(--t-s); }
+.help { margin-top: var(--s-5); border-top: 1px solid var(--hairline); padding-top: var(--s-3); font-size: var(--t-s); }
 .help summary { min-height: 48px; display: flex; align-items: center; font-weight: 600; cursor: pointer; }
 .help ol { margin: 0 0 var(--s-3); padding-left: var(--s-5); display: grid; gap: var(--s-2); }
 .help p { color: var(--muted); }
@@ -393,7 +460,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   margin: var(--s-3) 0;
   padding: var(--s-3);
   border-radius: var(--r-s);
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   background: var(--bg);
   font-size: var(--t-xs);
   white-space: pre-wrap;
@@ -406,9 +473,9 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .segmented legend, .field-label { display: block; font-size: var(--t-s); font-weight: 600; color: var(--muted); margin: var(--s-3) 0 var(--s-2); padding: 0; }
 .segmented label { position: relative; }
 .segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; }
-.segmented span { min-height: 48px; display: grid; place-items: center; border-radius: var(--r-m); border: 1px solid var(--line); background: var(--raised); font-weight: 600; }
-.segmented input:checked + span { border-color: var(--accent); color: var(--accent); }
-.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.segmented span { min-height: 48px; display: grid; place-items: center; border-radius: var(--r-m); border: 1px solid var(--edge); background: var(--raised); color: var(--muted); font-weight: 700; }
+.segmented input:checked + span { background: var(--raised-hi); color: var(--text); box-shadow: inset 0 0 0 2px var(--text); }
+.segmented input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
 .field {
   width: 100%;
   min-height: 52px;
@@ -418,7 +485,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   background: var(--bg);
   font-size: var(--t-m);
 }
-.field:focus { border-color: var(--accent); outline: none; }
+.field:focus { border-color: var(--text); outline: none; box-shadow: 0 0 0 1px var(--text); }
 form .button { width: 100%; margin-top: var(--s-5); }
 
 /* Kort melding ved feil på en enkeltkommando */
@@ -432,8 +499,9 @@ form .button { width: 100%; margin-top: var(--s-5); }
   border-radius: var(--r-m);
   background: var(--text);
   color: var(--bg);
+  box-shadow: var(--lift);
   font-size: var(--t-s);
-  font-weight: 600;
+  font-weight: 700;
   opacity: 0;
   transform: translate(-50%, 8px);
   pointer-events: none;
@@ -450,7 +518,7 @@ form .button { width: 100%; margin-top: var(--s-5); }
 /* Taster: tall og fargetaster */
 .color-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); margin-bottom: var(--s-3); }
 .color {
-  height: 40px;
+  height: var(--tap);
   border: 0;
   border-radius: var(--r-full);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 1px 2px rgb(0 0 0 / 0.4);
@@ -473,13 +541,13 @@ form .button { width: 100%; margin-top: var(--s-5); }
   border-radius: var(--r-m);
   background: var(--raised);
   box-shadow: var(--bevel);
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   transition-property: transform, background-color, box-shadow;
   transition-duration: var(--press);
 }
-.num.small { font-size: var(--t-s); color: var(--muted); }
+.num.small { font-size: var(--t-s); font-weight: 700; color: var(--muted); }
 .num.small .icon { width: 20px; height: 20px; color: var(--text); }
 .num:active { transform: scale(0.96); background: var(--raised-hi); }
 .num.is-unavailable { visibility: hidden; }
@@ -499,6 +567,7 @@ form .button { width: 100%; margin-top: var(--s-5); }
   background: var(--raised);
   box-shadow: var(--bevel);
   font-size: var(--t-xs);
+  font-weight: 600;
   color: var(--muted);
   text-align: center;
   transition-property: transform, background-color, box-shadow;
@@ -509,7 +578,6 @@ form .button { width: 100%; margin-top: var(--s-5); }
 
 /* Skriv og søk */
 .field.large { min-height: 56px; font-size: var(--t-l); }
-#textForm .search-action { margin-top: var(--s-3); }
 .text-actions { display: grid; grid-template-columns: 1fr auto auto; gap: var(--s-2); margin-top: var(--s-2); }
 #textForm .text-actions .button { width: auto; margin-top: 0; }
 .button.icon-only { width: 56px !important; padding: 0; }
@@ -532,7 +600,7 @@ form .button { width: 100%; margin-top: var(--s-5); }
   transition-duration: var(--press);
 }
 .yt-item:active { background: var(--raised); transform: scale(0.99); }
-.yt-item.is-playing { background: var(--raised); box-shadow: inset 0 0 0 2px var(--accent); }
+.yt-item.is-playing { background: var(--raised); box-shadow: inset 0 0 0 2px var(--ok); }
 .yt-thumb { position: relative; width: 136px; aspect-ratio: 16 / 9; border-radius: var(--r-s); overflow: hidden; background: var(--raised); }
 .yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .yt-duration {
@@ -543,8 +611,8 @@ form .button { width: 100%; margin-top: var(--s-5); }
   border-radius: 4px;
   background: rgb(0 0 0 / 0.8);
   color: #fff;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--t-xs);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .yt-duration.live { background: #cc0000; }
@@ -563,7 +631,7 @@ form .button { width: 100%; margin-top: var(--s-5); }
 /* Forsiden: søkefelt og «Spilles nå» øverst */
 .home-top { display: grid; gap: var(--s-2); margin-top: var(--s-1); }
 .search-pill {
-  height: 48px;
+  height: 52px;
   display: flex;
   align-items: center;
   gap: var(--s-3);
@@ -571,6 +639,7 @@ form .button { width: 100%; margin-top: var(--s-5); }
   border: 0;
   border-radius: var(--r-full);
   background: var(--surface);
+  border: 1px solid var(--edge);
   color: var(--muted);
   text-align: left;
   transition-property: background-color;
@@ -578,12 +647,12 @@ form .button { width: 100%; margin-top: var(--s-5); }
 }
 .search-pill > span:first-of-type { flex: 1; font-size: var(--t-m); }
 .search-pill:active { background: var(--raised); }
-.search-pill-mic { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--r-full); color: var(--text); }
+.search-pill-mic { width: var(--tap); height: var(--tap); display: grid; place-items: center; border-radius: var(--r-full); color: var(--text); }
 .search-pill-mic:active { background: var(--raised-hi); }
 
 .nowbar {
   display: grid;
-  grid-template-columns: 1fr 44px 40px;
+  grid-template-columns: 1fr var(--tap) var(--tap);
   align-items: center;
   gap: var(--s-1);
   padding: var(--s-1);
@@ -595,9 +664,9 @@ form .button { width: 100%; margin-top: var(--s-5); }
 .nowbar-thumb { width: 64px; flex: none; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: var(--surface); }
 .nowbar-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .nowbar-text { min-width: 0; display: grid; }
-.nowbar-text small { font-size: 11px; color: var(--accent); font-weight: 600; }
+.nowbar-text small { font-size: var(--t-xs); color: var(--ok); font-weight: 700; }
 .nowbar-text span { font-size: var(--t-s); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nowbar-action { height: 40px; display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; }
+.nowbar-action { height: var(--tap); display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; }
 .nowbar-action:active { background: var(--raised-hi); }
 
 /* YouTube: eget skjermbilde over fjernkontrollen */
@@ -628,10 +697,10 @@ body.yt-open { overflow: hidden; }
   background: var(--surface);
   color: var(--muted);
 }
-.ytview-field:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
+.ytview-field:focus-within { box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.5); }
 .ytview-field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; color: var(--text); font-size: var(--t-m); outline: none; }
 .ytview-field input::-webkit-search-cancel-button { filter: invert(1) brightness(0.8); }
-.ytview-mic { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; color: var(--text); }
+.ytview-mic { width: var(--tap); height: var(--tap); display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; color: var(--text); }
 .ytview-mic:active { background: var(--raised); }
 .ytview-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--s-2) var(--s-4); overscroll-behavior: contain; }
 .ytview-body > .hint { padding: 0 var(--s-2); }
@@ -640,10 +709,10 @@ body.yt-open { overflow: hidden; }
 .yt-recent { padding: var(--s-2) var(--s-2) 0; }
 .yt-recent-head { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
 .yt-recent-head h2 { font-size: var(--t-s); font-weight: 600; color: var(--muted); }
-.link-button { min-height: 40px; padding: 0 var(--s-2); border: 0; background: none; color: var(--muted); font-size: var(--t-s); }
+.link-button { min-height: var(--tap); padding: 0 var(--s-2); border: 0; background: none; color: var(--muted); font-size: var(--t-s); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .chip {
-  min-height: 40px;
+  min-height: var(--tap);
   max-width: 100%;
   padding: 0 var(--s-4);
   border: 0;
@@ -656,3 +725,32 @@ body.yt-open { overflow: hidden; }
 }
 .chip:active { background: var(--raised); }
 
+/* Siste søk på forsiden: én rad under søkefeltet */
+.home-recent { display: flex; gap: var(--s-2); overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--s-4)); padding: 0 var(--s-4); }
+.home-recent::-webkit-scrollbar { display: none; }
+.home-recent .chip { flex: none; display: flex; align-items: center; gap: 6px; max-width: 70%; padding: 0 var(--s-3); color: var(--muted); border: 1px solid var(--edge); }
+.home-recent .chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.home-recent .chip .icon { width: 16px; height: 16px; }
+
+/* Høye skjermer: knappene vokser og mellomrommene øker (med tak), så det ikke blir
+   et tomt felt midt på. Lave skjermer skjuler siste søk på forsiden for å spare plass. */
+@media (max-height: 759px) {
+  .home-recent { display: none; }
+}
+@media (min-height: 760px) {
+  .remote { gap: clamp(var(--s-4), 3dvh, 30px); }
+  .segmented-bar button { min-height: 58px; }
+  .segmented-bar.transport button { min-height: 54px; }
+  .tool { min-height: 54px; }
+  .tool .icon { width: 22px; height: 22px; }
+  .app-icon.m { width: 56px; height: 56px; border-radius: 16px; }
+}
+/* Svært lave skjermer (f.eks. 320×568): tettere, og verktøylinjen får ikon og tekst på én linje. */
+@media (max-height: 600px) {
+  .remote { gap: var(--s-2); padding-top: var(--s-2); }
+  .tool { flex-direction: row; gap: 6px; }
+  .tool .icon { width: 18px; height: 18px; }
+  .segmented-bar button { min-height: 48px; }
+  .segmented-bar.transport button { min-height: var(--tap); }
+  .rocker { min-height: 150px; }
+}

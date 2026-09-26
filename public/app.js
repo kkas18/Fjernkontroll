@@ -132,6 +132,84 @@ function haptic(pattern = 10) {
   navigator.vibrate?.(pattern);
 }
 
+// ---------- Ark ----------
+
+// Arkene glir ned når de lukkes, og kan dras ned eller lukkes med et trykk utenfor.
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const SWIPE_CLOSE_PX = 80;
+
+function closeSheet(dialog) {
+  if (!dialog.open || dialog.classList.contains('is-closing')) return;
+  if (reducedMotion.matches) {
+    dialog.style.transform = '';
+    dialog.close();
+    return;
+  }
+  dialog.classList.remove('is-dragging', 'is-settling');
+  dialog.classList.add('is-closing');
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    dialog.classList.remove('is-closing');
+    dialog.style.transform = '';
+    dialog.close();
+  };
+  dialog.addEventListener('animationend', finish, { once: true });
+  setTimeout(finish, 260);
+}
+
+function enableSheet(dialog) {
+  const grip = document.createElement('div');
+  grip.className = 'sheet-grip';
+  grip.setAttribute('aria-hidden', 'true');
+  dialog.prepend(grip);
+
+  // Escape og Android-tilbake lukker med samme animasjon.
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeSheet(dialog);
+  });
+  // Trykk på den mørke bakgrunnen (utenfor arket) lukker.
+  dialog.addEventListener('click', (event) => {
+    if (event.target !== dialog) return;
+    const box = dialog.getBoundingClientRect();
+    if (event.clientY < box.top || event.clientX < box.left || event.clientX > box.right) closeSheet(dialog);
+  });
+
+  // Dra ned fra håndtaket eller overskriften.
+  let startY = null;
+  let offset = 0;
+  dialog.addEventListener('pointerdown', (event) => {
+    const handle = event.target.closest('.sheet-grip, .sheet-head');
+    if (!handle || event.target.closest('button, input, a') || dialog.scrollTop > 0) return;
+    startY = event.clientY;
+    offset = 0;
+    dialog.setPointerCapture(event.pointerId);
+    dialog.classList.remove('is-settling');
+    dialog.classList.add('is-dragging');
+  });
+  dialog.addEventListener('pointermove', (event) => {
+    if (startY === null) return;
+    offset = Math.max(0, event.clientY - startY);
+    dialog.style.transform = `translateY(${offset}px)`;
+  });
+  const release = () => {
+    if (startY === null) return;
+    startY = null;
+    dialog.classList.remove('is-dragging');
+    if (offset > SWIPE_CLOSE_PX) {
+      closeSheet(dialog);
+      return;
+    }
+    dialog.classList.add('is-settling');
+    dialog.style.transform = '';
+  };
+  dialog.addEventListener('pointerup', release);
+  dialog.addEventListener('pointercancel', release);
+}
+$$('dialog.sheet').forEach(enableSheet);
+
 // Skjermlesere får beskjed når TV-en blir klar, siden statuslinjen da skjules.
 function announce() {
   const key = state.ready && state.device ? `${state.device.type}:${state.device.host}` : null;
@@ -145,7 +223,7 @@ function render() {
   const name = device ? displayName(device, state.saved) : 'Ingen TV';
   $('#deviceName').textContent = name;
   $('#deviceMeta').hidden = !device;
-  $('#deviceMeta').textContent = device ? device.host : '';
+  $('#deviceMeta').textContent = device ? typeLabel(device.type) : '';
   $('#deviceButton').setAttribute('aria-label', device ? `${name}, ${typeLabel(device.type)} på ${device.host}. Bytt TV` : 'Velg TV');
   $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code ? 'err' : 'busy') : 'off';
 
@@ -254,7 +332,7 @@ function appRow(app, favoriteIds) {
   name.textContent = app.name;
   open.append(appIcon(app, 's'), name);
   open.addEventListener('click', () => {
-    $('#appsSheet').close();
+    closeSheet($('#appsSheet'));
     launch(app, null);
   });
   const star = document.createElement('button');
@@ -301,7 +379,7 @@ function deviceItem(device, { stored }) {
   detail.textContent = `${typeLabel(device.type)} · ${device.host}`;
   select.append(name, detail);
   select.addEventListener('click', () => {
-    $('#devicesSheet').close();
+    closeSheet($('#devicesSheet'));
     connect(device);
   });
   li.append(select);
@@ -550,7 +628,7 @@ $('#emptyScan').addEventListener('click', () => openDevices({ scanNow: true }));
 $('#emptyManual').addEventListener('click', () => $('#manualDialog').showModal());
 $('#scan').addEventListener('click', scan);
 $('#manualOpen').addEventListener('click', () => $('#manualDialog').showModal());
-$$('[data-close]').forEach((el) => el.addEventListener('click', () => $(`#${el.dataset.close}`).close()));
+$$('[data-close]').forEach((el) => el.addEventListener('click', () => closeSheet($(`#${el.dataset.close}`))));
 
 $('#noticeAction').addEventListener('click', (event) => {
   if (!state.device) return;
@@ -596,7 +674,7 @@ $('#renameForm').addEventListener('submit', (event) => {
     return customName ? { ...rest, customName } : rest;
   });
   persist();
-  $('#renameDialog').close();
+  closeSheet($('#renameDialog'));
   renderLists();
   render();
 });
@@ -608,7 +686,7 @@ $('#removeConfirm').addEventListener('click', () => {
     renderLists();
   }
   removing = null;
-  $('#removeDialog').close();
+  closeSheet($('#removeDialog'));
 });
 
 $('#manualForm').addEventListener('submit', (event) => {
@@ -620,12 +698,14 @@ $('#manualForm').addEventListener('submit', (event) => {
     $('#ip').focus();
     return;
   }
-  $('#manualDialog').close();
-  $('#devicesSheet').close();
+  closeSheet($('#manualDialog'));
+  closeSheet($('#devicesSheet'));
   connect({ type, host, name: type === 'lg' ? 'LG-TV' : 'Roku' });
 });
 
+// «Skriv på TV» ligger i «Mer»; arket byttes uten animasjon så to ark ikke står oppå hverandre.
 $('#textOpen').addEventListener('click', () => {
+  $('#moreSheet').close();
   $('#textDialog').showModal();
   $('#tvText').focus();
 });
@@ -634,7 +714,32 @@ $('#textBackspace').addEventListener('click', (event) => send('Backspace', event
 
 const RECENT_KEY = 'fjern-yt-recent';
 const recentSearches = () => addRecent(storage.read(RECENT_KEY, []), '');
-const rememberSearch = (query) => storage.write(RECENT_KEY, addRecent(storage.read(RECENT_KEY, []), query));
+const rememberSearch = (query) => {
+  storage.write(RECENT_KEY, addRecent(storage.read(RECENT_KEY, []), query));
+  renderHomeRecent();
+};
+
+// Siste søk vises også på forsiden, i plassen under søkefeltet (bare på høye skjermer, se CSS).
+const HOME_RECENT_MAX = 4;
+function renderHomeRecent() {
+  const list = recentSearches().slice(0, HOME_RECENT_MAX);
+  $('#homeRecent').hidden = list.length === 0;
+  $('#homeRecent').replaceChildren(...list.map((query) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    const text = document.createElement('span');
+    text.textContent = query;
+    chip.append(svgIcon('recent'), text);
+    chip.setAttribute('aria-label', `Søk på YouTube etter ${query}`);
+    chip.addEventListener('click', () => {
+      openYouTube({ focus: false });
+      $('#ytQuery').value = query;
+      runSearch(query);
+    });
+    return chip;
+  }));
+}
 
 function renderRecent() {
   const list = recentSearches();
@@ -845,7 +950,9 @@ $('#ytQuery').addEventListener('input', () => {
 $('#ytRecentClear').addEventListener('click', () => {
   storage.write(RECENT_KEY, []);
   renderRecent();
+  renderHomeRecent();
 });
+renderHomeRecent();
 $('#ytMic').hidden = !voiceAvailable;
 $('#searchPillMic').hidden = !voiceAvailable;
 
@@ -900,7 +1007,7 @@ function inputRow(input) {
   button.addEventListener('click', async () => {
     try {
       await api('input', { id: input.id });
-      $('#inputSheet').close();
+      closeSheet($('#inputSheet'));
       toast(`Bytter til ${input.name}.`);
     } catch (error) {
       toast(error.message);
@@ -912,11 +1019,11 @@ function inputRow(input) {
 
 $('#powerOpen').addEventListener('click', openPower);
 $('#powerOff').addEventListener('click', () => {
-  $('#powerDialog').close();
+  closeSheet($('#powerDialog'));
   send('PowerOff', $('#powerOpen'));
 });
 $('#powerOn').addEventListener('click', async () => {
-  $('#powerDialog').close();
+  closeSheet($('#powerDialog'));
   if (await send('PowerOn', $('#powerOpen'), { requireReady: false })) {
     toast('Slår på TV-en …');
     refreshStatus();
@@ -956,7 +1063,7 @@ document.addEventListener('visibilitychange', () => {
 window.__fjernBack = () => {
   const open = document.querySelector('dialog[open]');
   if (open) {
-    open.close();
+    closeSheet(open);
     return true;
   }
   if (!$('#ytView').hidden) {
