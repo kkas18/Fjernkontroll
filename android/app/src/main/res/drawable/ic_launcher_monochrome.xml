@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Temaikon (Android 13+): én farge, systemet fargelegger. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3"
+        android:pathData="M24,54 a30,30 0 1,0 60,0 a30,30 0 1,0 -60,0 Z" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3.2" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M49.6,36.2 L54,31.8 L58.4,36.2 M49.6,71.8 L54,76.2 L58.4,71.8 M36.2,49.6 L31.8,54 L36.2,58.4 M71.8,49.6 L76.2,54 L71.8,58.4" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M41.2,54 a12.8,12.8 0 1,0 25.6,0 a12.8,12.8 0 1,0 -25.6,0 Z" />
+</vector>
