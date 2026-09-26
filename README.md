@@ -2,7 +2,17 @@
 
 Fjernkontroll for **Roku** og **LG webOS** som kjører på din egen Android-telefon. Appen er en installerbar PWA, og en liten lokal bro i Node sender kommandoene til TV-en over Wi‑Fi. Ingen konto, sky eller npm-pakker.
 
-## Installer på Android
+## Installer på Android (APK, anbefalt)
+
+Android-appen har broen innebygd, så du trenger verken Termux eller Node.
+
+1. Last ned `Fjern-<versjon>.apk` til telefonen. Nyeste bygg ligger under **Actions → CI → siste kjøring → Artifacts** på GitHub.
+2. Åpne filen. Android spør første gang om du vil tillate installasjon fra denne kilden (for eksempel Chrome eller Filer). Tillat, og trykk **Installer**.
+3. Åpne **Fjern**. Telefon og TV må være på samme Wi‑Fi. Trykk **Søk etter TV**, eller legg til TV-en med IP-adresse.
+
+Krever Android 8.0 eller nyere. Nye versjoner installeres over den gamle, og lagrede TV-er og paringer beholdes.
+
+## Installer som PWA (med Termux)
 
 1. Installer [Termux fra F-Droid](https://f-droid.org/packages/com.termux/) og åpne den.
 2. Kjør, én linje om gangen:
@@ -68,9 +78,19 @@ npm run verify   # syntakssjekk + tester (kjøres også i CI)
 | --- | --- |
 | `server.mjs` | HTTP-broen: statiske filer, API og sikkerhetshoder |
 | `lib/` | Roku (ECP), LG (SSAP), SSDP-søk, WebSocket-klient, validering og feilmeldinger |
-| `public/` | PWA-en: HTML, CSS, JS, service worker, manifest og ikoner |
+| `public/` | Grensesnittet: HTML, CSS, JS, service worker, manifest og ikoner. Brukes av både PWA og APK |
+| `android/` | Android-appen: WebView med grensesnittet og broen skrevet i Kotlin (`app/src/main/java/no/fjern/app/`) |
 | `tests/` | Enhets- og integrasjonstester |
 | `docs/revisjon/` | Tidligere revisjon og skjermbilder fra hver runde |
+
+Bygg APK lokalt (krever JDK 17 og Android SDK):
+
+```sh
+cd android
+./gradlew testDebugUnitTest assembleRelease   # APK: app/build/outputs/apk/release/app-release.apk
+```
+
+APK-en signeres med debug-nøkkelen i `android/app/debug.keystore`. Den er offentlig etter Android-konvensjon, og gjør at alle bygg kan installeres over hverandre. For distribusjon utenfor egen telefon: legg en egen nøkkel i repo-hemmelighetene `FJERN_KEYSTORE_BASE64`, `FJERN_KEYSTORE_PASSWORD`, `FJERN_KEY_ALIAS` og `FJERN_KEY_PASSWORD`, så bruker CI den. Byttes nøkkelen, må appen avinstalleres én gang.
 
 API-et (`/api/status`, `/api/scan`, `/api/connect`, `/api/command`, `/api/text`) er bare ment for appen selv.
 

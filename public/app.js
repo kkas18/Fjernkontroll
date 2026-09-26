@@ -46,7 +46,39 @@ function remember(device) {
   persist();
 }
 
+// I Android-appen går kallene direkte til Kotlin-broen i stedet for til Node over HTTP.
+const native = window.FjernAndroid;
+const nativePending = new Map();
+let nativeId = 0;
+window.__fjernNative = (id, result) => {
+  const resolve = nativePending.get(id);
+  if (!resolve) return;
+  nativePending.delete(id);
+  resolve(result);
+};
+if (native) document.documentElement.dataset.platform = 'android';
+
+function nativeCall(route, body) {
+  return new Promise((resolve, reject) => {
+    const id = String(++nativeId);
+    const timer = setTimeout(() => {
+      nativePending.delete(id);
+      reject(new Error('TV-en svarte ikke i tide.'));
+    }, 20_000);
+    nativePending.set(id, (result) => {
+      clearTimeout(timer);
+      resolve(result);
+    });
+    native.request(id, route, body ? JSON.stringify(body) : null);
+  });
+}
+
 async function api(route, body) {
+  if (native) {
+    const { status, body: data } = await nativeCall(route, body);
+    if (status >= 400) throw new Error(data?.error || 'Noe gikk galt.');
+    return data;
+  }
   let response;
   try {
     response = await fetch(`/api/${route}`, {
@@ -476,7 +508,15 @@ document.addEventListener('visibilitychange', () => {
   else startPolling();
 });
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+// Android-tilbakeknappen lukker først et åpent ark.
+window.__fjernBack = () => {
+  const open = document.querySelector('dialog[open]');
+  if (!open) return false;
+  open.close();
+  return true;
+};
+
+if (!native && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 state.saved = storage.read('fjern-devices', []).filter(isValidDevice);
 const lastSelected = storage.read('fjern-selected', null);

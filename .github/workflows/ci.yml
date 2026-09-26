@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,3 +22,38 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Syntakssjekk og tester
         run: npm run verify
+
+  android:
+    runs-on: ubuntu-latest
+    env:
+      HAS_RELEASE_KEY: ${{ secrets.FJERN_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      # Valgfritt: egen release-nøkkel fra repo-hemmeligheter. Uten den brukes debug-nøkkelen i repoet.
+      - name: Release-nøkkel
+        if: env.HAS_RELEASE_KEY == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.FJERN_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "FJERN_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+      - name: Tester og APK
+        working-directory: android
+        env:
+          FJERN_KEYSTORE_PASSWORD: ${{ secrets.FJERN_KEYSTORE_PASSWORD }}
+          FJERN_KEY_ALIAS: ${{ secrets.FJERN_KEY_ALIAS }}
+          FJERN_KEY_PASSWORD: ${{ secrets.FJERN_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+      - name: Versjon
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fjern-${{ steps.version.outputs.version }}-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
