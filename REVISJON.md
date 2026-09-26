@@ -1,332 +1,141 @@
-# Revisjon av Fjern PWA
+# Revisjon av Fjern – runde 2 (v2.0.0)
 
-**Dato:** 2026-09-26 · **Versjon:** 2 (full revisjon, design + teknikk)
-**Omfang:** Hele repoet: `server.mjs`, `app.js`, `sw.js`, `index.html`, `style.css`, `manifest.webmanifest`, `README.md`, `icons/`
-**Mål:** Gjøre design, brukeropplevelse og teknikk optimalt, og **fjerne det generiske «AI-laget»-uttrykket**.
-
-> **Status:** Alle forslag er gjennomført i versjon 2.0.0. Del A–D beskriver tilstanden **før** utbedring (filreferanser gjelder den gamle koden). **[Del E](#del-e--etter-utbedring-v200)** viser resultatet og ny skår: **47 → 83 / 100**.
+**Dato:** 2026-09-26 · **Revidert versjon:** `27e18f3` (v2.0.0, etter redesign)
+**Omfang:** Hele repoet: `server.mjs`, `lib/`, `public/`, `tests/`, CI, dokumentasjon.
+**Forrige revisjon:** [`docs/revisjon/REVISJON-v1.md`](docs/revisjon/REVISJON-v1.md) (v1: 47/100, egenvurdert etter utbedring: 83/100).
 
 ## Metode
 
-Gjennomgangen følger sjekklistene i pluginen [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (ECC v2.2.2, installert med prosjektomfang i `.claude/settings.json`):
+Samme rammeverk som i første runde, slik at skårene kan sammenlignes: ECC-skillsene `production-audit`, `security-review`, `error-handling`, `design-system` (10 dimensjoner + «AI slop»), `frontend-design-direction`, `make-interfaces-feel-better`, `frontend-a11y` og `verification-loop`.
 
-| ECC-skill | Brukt til |
+Denne gangen ble koden lest med friske øyne og **uten å gi meg selv fordel av tvilen** for kode jeg skrev i forrige runde. Funn er verifisert der det lot seg gjøre:
+
+- `npm run verify`: 15/15 filer, 34/34 tester. CI grønn på Node 20 og 22.
+- Kontrastmåling av alle fargepar (WCAG 2.2).
+- Prober mot `lib/` for nøkkellager, SSDP og TLS.
+- Chromium-kjøring av grensesnittet gjennom broen (fra forrige runde, uendret kode).
+
+---
+
+## Sammendrag
+
+### Totalskår: **79 / 100**
+
+Forrige runde anslo 83 rett etter utbedringen. Med en strengere gjennomgang lander v2 på **79**. Forskjellen skyldes funn som ikke var synlige før koden var skrevet: Roku-pause som starter avspilling, en Roku-TV som alltid vises som tilkoblet, TLS uten sertifikatlåsing og en race i nøkkellageret.
+
+| # | Område | Vekt | v1 | v2 | Kort begrunnelse |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Funksjon og korrekthet | 15 % | 4 | 7,5 | Alt grunnleggende virker, men Roku-pause veksler, og det finnes ingen «slå på». |
+| 2 | Sikkerhet | 10 % | 7,5 | 8,5 | Sterk lokal modell og CSP. LG-TLS godtar ethvert sertifikat (ingen låsing). |
+| 3 | Robusthet | 10 % | 4,5 | 7,5 | Roku-helse sjekkes aldri, LG kobler ikke til igjen selv, race i nøkkellager. |
+| 4 | Visuell kvalitet | 15 % | 5 | 8,5 | Stramt token-system og rolig uttrykk. |
+| 5 | Egenart | 10 % | 3 | 8 | Ingen AI-mønstre igjen. Stort tomt felt øverst på høye telefoner. |
+| 6 | UX | 15 % | 5 | 7,5 | Én skjerm og god tommelsone. Pause-feil, `confirm()`, tekst kan bare legges til. |
+| 7 | Tilgjengelighet | 5 % | 6 | 7 | Navn og trykkflater er gode. Knappekanter har for lav kontrast (1,2–1,5:1). |
+| 8 | PWA og ytelse | 5 % | 6,5 | 8,5 | 36 KB, virker uten bro, SVG-ikon og skjermbilder. |
+| 9 | Kodekvalitet | 5 % | 4 | 8 | Lesbare moduler og testbar bro. `app.js` er én fil uten tester. |
+| 10 | Test, CI og dokumentasjon | 10 % | 2,5 | 7,5 | 34 tester og CI. Ingen tester for grensesnittet, og TLS-stien er bare testet manuelt. |
+
+**Production audit (ECC): 78/100, «launchable with caveats».** Ingen blokkerende funn. Taket er 84 inntil appen er testet ende til ende mot ekte Roku- og LG-TV-er.
+
+| Alvorlighet | Antall |
 | --- | --- |
-| `design-system` (visuell audit + «AI slop detection») | 10 designdimensjoner og sjekk av typiske AI-mønstre |
-| `frontend-design-direction` | Retning, hierarki og anti-mønstre for verktøy-UI |
-| `make-interfaces-feel-better` | Radius, bevegelse, trykkflater, typografiske detaljer |
-| `production-audit` | Klar-for-bruk-score og driftsrisiko |
-| `security-review`, `error-handling` | Sikkerhet, validering og feilmeldinger |
-| `frontend-a11y` | Semantikk, ARIA, tastatur og fokus |
-| `verification-loop` | Funn er verifisert mot kjørende kode, ikke bare lest |
-
-**Evidens:** Broen ble kjørt lokalt (Node 22) og API-et testet med `curl`. Grensesnittet ble rendret i Chromium på 390×844 (vanlig telefon) med mocket API, og elementposisjoner ble målt. CSS-en ble analysert for farger, radius og skriftstørrelser. Skjermbilder ligger i [`docs/revisjon/`](docs/revisjon/).
+| 🔴 Kritisk | 0 |
+| 🟠 Høy | 3 |
+| 🟡 Middels | 7 |
+| 🔵 Lav | 9 |
 
 ---
 
-## Sammendrag og skår
+## 🟠 Høy
 
-### Totalskår: **47 / 100**
+### H1. Roku: «Pause» starter avspilling når videoen allerede står på pause
+`lib/roku.mjs:9` mapper `Pause` til `Play`, fordi Roku ECP bare har én play/pause-tast. Grensesnittet viser likevel to knapper (▶ og ⏸). Trykker brukeren ⏸ på en video som allerede er pauset, starter den igjen. Det er det motsatte av det knappen lover.
+**Tiltak:** Broen returnerer hvilke kommandoer TV-typen støtter (`capabilities`) i `/api/status`. For Roku viser grensesnittet én kombinert ⏯-knapp. LG beholder to knapper.
 
-| # | Område | Vekt | Skår | Kort begrunnelse |
+### H2. Roku vises alltid som tilkoblet
+`server.mjs:73` svarer `ready: true` for Roku uten å sjekke TV-en. Er TV-en slått av ved strømbryteren eller har fått ny IP, lyser statusprikken grønt, og hvert trykk gir en feilmelding.
+**Tiltak:** Lett helsesjekk (`/query/device-info`, 1,5 s tidsavbrudd), bufret i 10 s og brukt i `/api/status`. Ved feil: `ready: false` og en tydelig melding.
+
+### H3. LG: TLS uten sertifikatlåsing
+`lib/lg.mjs:102` åpner `wss://:3001` med `insecureTls: true`, fordi LG bruker selvsignerte sertifikater. Det er nødvendig, men betyr at en angriper på samme Wi‑Fi kan utgi seg for TV-en (ARP-spoofing) og få tak i klientnøkkelen. Nøkkelen gir full kontroll over TV-en.
+**Tiltak:** Trust-on-first-use. Lagre SHA-256-fingeravtrykket til TV-ens sertifikat sammen med nøkkelen ved første paring. Senere tilkoblinger avvises hvis avtrykket er endret, med valget «Par på nytt» i grensesnittet.
+
+---
+
+## 🟡 Middels
+
+| # | Hvor | Funn | Evidens | Tiltak |
 | --- | --- | --- | --- | --- |
-| 1 | Funksjon og korrekthet | 15 % | 4 / 10 | Starter ikke fra repoet (K1). Roku spol/pause virker ikke (H1). |
-| 2 | Sikkerhet | 10 % | 7,5 / 10 | Solid lokal modell. Mangler CSP, `.gitignore` for nøkler. |
-| 3 | Robusthet og feilhåndtering | 10 % | 4,5 / 10 | Krasj ved nettverksfeil, engelske feilmeldinger, ingen LG-timeout. |
-| 4 | Visuell kvalitet og konsistens | 15 % | 5 / 10 | Pent ved første øyekast, men 62 farger, 9 radier og 17 skriftstørrelser. |
-| 5 | Egenart (fravær av AI-preg) | 10 % | 3 / 10 | Nesten alle kjente AI-mønstre er til stede, se del A2. |
-| 6 | UX og informasjonsarkitektur | 15 % | 5 / 10 | Fjernkontrollen er skjøvet under en reklameoverskrift. Volum havner bak menyen. |
-| 7 | Tilgjengelighet | 5 % | 6 / 10 | God fokusring og `reduced-motion`. Symboler leses opp, små tekster. |
-| 8 | PWA og ytelse | 5 % | 6,5 / 10 | Lett og uten avhengigheter. Poller i bakgrunnen, manifest kan forbedres. |
-| 9 | Kodekvalitet og vedlikehold | 5 % | 4 / 10 | Håndminifisert kode, ingen struktur for design-tokens. |
-| 10 | Test, CI og dokumentasjon | 10 % | 2,5 / 10 | Ingen tester eller CI. README beskriver filer som ikke finnes. |
+| M1 | `lib/lg.mjs` | LG kobler ikke til igjen av seg selv etter standby, Wi‑Fi-bytte eller når pekersocketen faller ut. Brukeren må åpne TV-listen og trykke på TV-en. | Kodelesing (`close`-lytteren setter bare tilstand) | Gjenoppkobling med økende ventetid (1, 2, 4, 8 s) når en tidligere klar forbindelse faller ut, og når appen blir synlig igjen. |
+| M2 | `lib/lg.mjs:52` | Race i nøkkellageret: to samtidige lagringer bruker samme midlertidige filnavn. | **Verifisert:** én skriving feilet med `ENOENT`, og én nøkkel gikk tapt. | Skriv én om gangen (promise-kjede) og bruk unikt midlertidig filnavn. |
+| M3 | `public/style.css` | Knappekanter og knappeflater har kontrast 1,5:1 og 1,2:1 mot bakgrunnen. WCAG 1.4.11 krever 3:1 for grensene til en komponent. | **Målt** (se tabell under) | `--line` til `#606166` (3,1:1). Behold den mørke flaten. |
+| M4 | Hele appen | Ingen «slå på». LG støtter Wake-on-LAN når «Slå på via Wi‑Fi» er aktivert, og Roku-TV-er tar imot `PowerOn` i hvilemodus. | Funksjonshull | Lagre MAC-adressen ved LG-paring og send en magisk pakke. Roku: `keypress/PowerOn`. Strømknappen blir en av/på-bryter. |
+| M5 | `public/style.css` (`.remote`) | Stort tomt felt øverst på høye telefoner: på 390×844 er omtrent 45 % av skjermen tom. Det er et bevisst valg for tommelsonen, men ser uferdig ut. | Skjermbilde `etter/01-kontroll.png` | Bruk feltet til noe nyttig uten å flytte kontrollene: raske valg for kilde og apper (Roku `query/apps`, LG `getInputList`), eller en stor «Tast inn»-flate. |
+| M6 | `lib/ssdp.mjs`, `lib/roku.mjs` | Ubegrenset input fra lokalnettet: SSDP-søket har ingen grense for antall enheter, og `rokuProbe` leser hele svaret uten størrelsesgrense. | **Verifisert:** 300 falske svar ble godtatt. | Maks 32 enheter per søk og 64 KB per svar. |
+| M7 | `tests/`, `public/app.js` | Grensesnittlogikken har ingen automatiske tester, og TLS-stien i WebSocket-klienten er bare testet manuelt. | Dekningsgjennomgang | Flytt ren logikk (IP-validering, tilstand til tekst, liste-sammenslåing) til en egen modul med `node:test`. Legg et test-sertifikat i `tests/fixtures/` og test `wss://` i CI. |
 
-**Production audit (ECC): 40/100, blokkert.** Appen kan ikke startes fra en ren checkout, og broen kan krasje ved nettverksfeil.
+### Kontrastmåling (WCAG 2.2)
 
-**Forventet skår etter tiltakene** (se del D): cirka 65 etter fase 1–2, cirka 80 etter redesign i fase 3, og 85–90 når tester, CI og test på ekte TV er på plass.
+| Par | Kontrast | Krav | Status |
+| --- | --- | --- | --- |
+| Tekst på bakgrunn | 16,1:1 | 4,5:1 | ✅ |
+| Dempet tekst på knapp | 6,2:1 | 4,5:1 | ✅ |
+| OK-tekst på oransje | 6,7:1 | 4,5:1 | ✅ |
+| Oransje på knapp (valgt TV-type) | 5,6:1 | 3:1 | ✅ |
+| Knappekant mot bakgrunn | **1,5:1** | 3:1 | ❌ M3 |
+| Knappeflate mot bakgrunn | **1,2:1** | 3:1 | ❌ M3 |
 
 ---
 
-## Del A – Design og «AI-preg»
+## 🔵 Lav
 
-### A1. Visuell audit (ECC `design-system`, 10 dimensjoner)
-
-| Dimensjon | Skår | Evidens | Tiltak |
-| --- | --- | --- | --- |
-| Fargekonsistens | 3/10 | **62 unike hex-farger** i `style.css`, men bare 9 tokens i `:root`. Nesten hver komponent har egne blågrå nyanser (`#172436`, `#192638`, `#1a293b`, `#1b293a` …). | Maks 10–12 tokens. Ingen rå hex utenfor `:root`. |
-| Typografisk hierarki | 5/10 | **17 ulike skriftstørrelser** (10–63 px). Inter er oppgitt, men lastes ikke. Det faller tilbake til systemfont, så designet ser annerledes ut enn tenkt. | Typeskala med 5–6 trinn. Velg én font bevisst og selvhost den, eller bruk systemfonten ærlig. |
-| Avstandsrytme | 4/10 | Vilkårlige verdier: 7, 9, 13, 17, 19, 23, 26, 38 px. | Skala på 4 px: 4, 8, 12, 16, 24, 32, 48. |
-| Komponentkonsistens | 5/10 | **9 ulike border-radius** (11–28 px). Ikonene blander SVG og Unicode-tegn (`⌂ ↶ ≪ Ⅱ ▶ ≫ ◉ ▣ ⓘ`), som rendres ulikt på hver enhet. | 3 radius-trinn. Ett SVG-ikonsett. |
-| Responsivitet | 6/10 | Fungerer fra 360 px. Men på 390×844 starter d-pad-en på y=403, og volumraden (y=758) ligger **under bunnmenyen** (skjermbilde 02). | Fjernkontrollen skal passe på én skjerm uten scrolling. |
-| Mørk modus | 7/10 | Konsekvent mørk og `color-scheme: dark`. Ingen lys variant, men det er et forsvarlig valg for en fjernkontroll. | Behold. Vurder «OLED-svart» for bruk i mørk stue. |
-| Animasjon | 6/10 | Enkel inngang og trykkskalering. `transition:.22s` på toast animerer **alle** egenskaper. | Oppgi eksplisitte egenskaper. |
-| Tilgjengelighet | 6/10 | Fokusring og `reduced-motion` finnes. Tekst på 10–11 px, og symboler leses opp. | Se lav nr. 8 i del C. |
-| Informasjonstetthet | 4/10 | Store overskrifter, «eyebrows», intro-tekst og statuskort **før** selve verktøyet. «TILKOBLET / Tilkoblet» vises dobbelt. | Verktøyet først, all pynt ut. |
-| Polish | 6/10 | Trykktilstander, toast og tomtilstander finnes. Ingen lastetilstand på knapper under tilkobling. | Tilstand per knapp (sendt/feilet). |
-| **Snitt** | **5,2/10** | | |
-
-### A2. «AI slop»-sjekk: hva gjør at appen ser AI-generert ut?
-
-| # | Mønster | Hvor | Hvorfor det avslører seg |
-| --- | --- | --- | --- |
-| 1 | **Todelt heltoverskrift med aksentfarge på linje 2** («Din fjernkontroll. *Endelig samlet.*», «Dine TV-er. *Ett trykk unna.*», «Enkelt å koble til. *Enkelt å bruke.*») | Alle tre visninger | Den vanligste malen fra generative verktøy. At den gjentas tre ganger forsterker inntrykket. |
-| 2 | **«Eyebrow» med bred sperring i aksentfarge** (UNIVERSAL KONTROLL, TILKOBLINGER, KOM I GANG) | Alle visninger, dialoger og seksjoner | Pynt som ikke bærer informasjon. |
-| 3 | **Markedsføringstekst inne i et verktøy** («et grensesnitt som føles like godt som det ser ut», «Alt på ett sted», «Alle skjermene dine på ett sted») | Tomtilstand og intro | ECC-anti-mønster: *«Do not describe the UI's features inside the UI»*. |
-| 4 | **Navy + gull «luksus»-palett** med gradientknapper, radial glød bak toppen og gradientstreker | `style.css:1,4,18,19` | Standardvalget for «premium» i AI-design. Paletten er énfarget: gull er eneste aksent. |
-| 5 | **Alt er avrundede kort, kort i kort** (d-pad-kort rundt knapper, statuskort, hjelpekort) | Hele appen | ECC: *«Do not add UI cards inside other cards»*. |
-| 6 | **Pil `↗` på alle primærknapper** (Finn en TV, Koble til, Tast inn tekst) | `index.html` | `↗` betyr «åpner ekstern lenke». Her er det bare pynt, og det er en typisk AI-tic. |
-| 7 | **Nummererte trinnkort «01 02 03 04»** | Hjelp | Mal-layout fra landingssider. |
-| 8 | **3D-rendret, glinsende app-ikon** (gullfjernkontroll på blå glassflis) | `icons/` | Ser ut som et bildegenerert ikon. Ved 32–48 px blir det grøtete, og stilen passer ikke med det flate grensesnittet. |
-| 9 | **Unicode-symboler som ikoner** (`◉ ▣ ⓘ ◎`) | Bunnmeny, tomtilstand | Tilfeldige glyfer i stedet for et bevisst ikonspråk. |
-| 10 | **Generisk fontstabel** «Inter, ui-sans-serif …» uten at Inter lastes | `style.css:4` | ECC: *«Sans-serif font stack with no personality»*. |
-
-**Konklusjon for del A:** Designet er ryddig og har god håndverksmessig finish, men det er bygget som en *landingsside for en fjernkontroll*, ikke som *en fjernkontroll*. Det er hovedgrunnen til at det føles AI-generert.
-
-### A3. Skjermbilder (390×844)
-
-| Kontroll, uten bro | Kontroll, tilkoblet | TV-er | Hjelp | Dialog |
-| --- | --- | --- | --- | --- |
-| ![](docs/revisjon/for/01-kontroll-uten-bro.png) | ![](docs/revisjon/for/02-kontroll-tilkoblet.png) | ![](docs/revisjon/for/03-tv-er.png) | ![](docs/revisjon/for/04-hjelp.png) | ![](docs/revisjon/for/05-dialog-ip.png) |
-
-Legg merke til skjermbilde 02: selve fjernkontrollen begynner halvveis ned, og volumknappene er skjult bak bunnmenyen.
+1. **Kanalknapper på Roku-spillere:** Roku Express og Ultra er ikke TV-er og avviser kanaltastene. `device-info` har `is-tv`. Skjul kanalvelgeren når verdien er `false`.
+2. **`confirm()` ved sletting** (`public/app.js:153`) bruker nettleserens standarddialog og bryter med designet. Bruk arket som de andre dialogene, eller «angre» i en toast.
+3. **Etiketten «Kan»** på kanalvelgeren er uklar (ligner det norske ordet «kan»). Skriv «Kanal».
+4. **Skjermleser:** Når TV-en blir klar, skjules statuslinjen, og ingenting blir lest opp. Kunngjør «Tilkoblet til LG OLED Stue» i en skjult `aria-live`-region.
+5. **CSP** tillater `img-src data:`, som ikke brukes. Stram inn til `'self'`.
+6. **Manuell cacheversjon i service workeren:** `CACHE = 'fjern-v2'` må økes for hånd. Legg til en test som feiler hvis versjonen ikke samsvarer med `package.json`.
+7. **iOS:** `-webkit-touch-callout: none` mangler, så langt trykk kan vise systemmeny. Android er ikke berørt.
+8. **Tekst til TV:** Man kan bare legge til tekst. Roku har `Backspace` i ECP. Legg til en «Slett»-knapp i tekstarket.
+9. **Ingen `.editorconfig`** eller felles formatregler. Lite prosjekt, men gjør bidrag enklere.
 
 ---
 
-## Del B – Foreslått designretning
+## Design: «AI slop»-sjekk på nytt
 
-**Prinsipp: Et fysisk verktøy, ikke en app-reklame.** Tenk på en god, fysisk fjernkontroll. Den har ingen overskrift, alle knapper er der tommelen er, og den er lett å bruke i mørket.
-
-### B1. Retning (ECC `frontend-design-direction`)
-
-| Valg | Forslag |
+| Mønster fra v1 | Status i v2 |
 | --- | --- |
-| Formål | Styre TV-en raskt, med én hånd, ofte i halvmørke. |
-| Tone | Nøktern, taktil, industriell. Mer «Braun/Teenage Engineering» enn «fintech-premium». |
-| Minneverdig detalj | En **fysisk vippebryter** for volum og kanal (vertikale «rocker»-knapper) og en **rund, tydelig OK-knapp** i en d-pad-ring. Det er den ene ideen som gjør appen gjenkjennelig. |
-| Begrensninger | Ingen eksterne skript, må fungere på 360×640, én-hånds bruk og mørk stue. |
+| Heltoverskrift, eyebrows, slagord | ✅ Borte |
+| Navy/gull, gradienter, glød | ✅ Borte. Grafitt + én funksjonell aksent. |
+| Kort i kort, `↗` overalt | ✅ Borte |
+| Unicode-ikoner, 3D-app-ikon | ✅ Erstattet av ett SVG-sett og et flatt ikon |
+| Generisk font som aldri lastes | ✅ Ærlig systemfont |
+| **Nytt:** Stort tomt felt øverst | ⚠️ M5 |
 
-### B2. Konkrete endringer
-
-**Layout og informasjonsarkitektur**
-1. **Fjern heltoverskrift, eyebrow og intro-tekst** i alle visninger. Førsteskjermen *er* fjernkontrollen.
-2. **Kompakt topplinje (48–56 px):** TV-navn med statusprikk (trykk for å bytte TV) og strømknapp. Statuskortet forsvinner. Feil vises som en tydelig stripe under topplinjen, ikke som en avkuttet tekst.
-3. **Alt på én skjerm uten scrolling** ved 360×740: d-pad-ring nederst i tommelsonen, vippebrytere for volum og kanal på hver side, Hjem/Tilbake/Demp i én rad, avspilling i én kompakt rad.
-4. **Slå sammen «TV-er» og «Hjelp»** til ett ark som åpnes fra TV-navnet. Hjelpen vises kontekstuelt (for eksempel i tomtilstanden og ved feil), ikke som en egen fane. Bunnmenyen kan da fjernes helt.
-5. **Tekstinntasting** som et fast tastaturikon i topplinjen i stedet for en stor knapp med `↗`.
-
-**Visuelt språk**
-6. **Palett (maks 10 tokens):** Nøytral grafitt i stedet for navy, for eksempel `--bg #111214`, `--surface #1b1c1f`, `--raised #26272b`, `--line #34353a`, `--text #ededee`, `--muted #9a9ba1`. **Én funksjonell aksent** kun for OK og aktiv tilstand (for eksempel varm oransje `#ff6a2b` eller behold en *dempet* messing uten gradient), pluss `--ok #3ecf8e` og `--err #ff5d5d` for status. Ingen gradienter, ingen glød.
-7. **Typografi:** Én bevisst valgt, selvhostet font med personlighet og god lesbarhet, for eksempel *Atkinson Hyperlegible*, *IBM Plex Sans* eller *Inter Tight*, eller en ærlig systemfont. Typeskala på 12/14/16/20/28, minst 12 px, og `font-variant-numeric: tabular-nums` på IP-adresser.
-8. **Form:** Tre radius-trinn (8 / 14 / 999 px). Knapper ser ut som knapper (lett innfelt eller hevet med 1 px lys kant øverst). Ingen kort rundt knappegrupper.
-9. **Ikoner:** Ett inline SVG-sett med lik strektykkelse (1,75 px) og 24 px rutenett. Erstatt alle Unicode-glyfer og fjern `↗`.
-10. **App-ikon:** Flatt, vektorbasert symbol, for eksempel en stilisert d-pad-ring eller en «F» i ringen, på ensfarget bakgrunn. Tegnes som SVG og eksporteres til alle størrelser, slik at det er skarpt ned til 32 px.
-
-**Mikrotekst**
-11. Korte, konkrete verb: «Koble til», «Søk», «Legg til IP», «Slå av». Fjern alle slagord. Tomtilstand: «Ingen TV valgt. [Søk etter TV] [Legg til med IP]».
-
-**Følelse og detaljer (ECC `make-interfaces-feel-better`)**
-12. Trykk: `scale(.96)` + kort haptikk (finnes allerede). Legg til **tilbakemelding per knapp** (kort blink ved OK, rød kant ved feil).
-13. Hold-for-å-gjenta på volum og piltaster (repeat hvert ~150 ms).
-14. Eksplisitte `transition-property`, ingen `transition: all`.
-15. Trykkflater minst 48×48 px. `×` og `›` på enhetskort er i dag bare tekst med 8 px padding.
-
-### B3. Skisse av ny førsteskjerm
-
-```
-┌────────────────────────────────────┐
-│ ● LG OLED Stue  ⌄          ⌨    ⏻ │  ← kompakt topplinje
-├────────────────────────────────────┤
-│                                    │
-│   ⌂ Hjem      ↩ Tilbake    🔇     │
-│                                    │
-│  ┌──┐        ╭──────╮        ┌──┐  │
-│  │ +│      ╭─┤  ▲   ├─╮      │ ▲│  │
-│  │  │      │◀│  OK  │▶│      │  │  │
-│  │VOL      ╰─┤  ▼   ├─╯      │CH│  │
-│  │ −│        ╰──────╯        │ ▼│  │
-│  └──┘                        └──┘  │
-│                                    │
-│      ⏪      ⏯       ⏩            │
-└────────────────────────────────────┘
-   (ingen bunnmeny, alt innen tommelrekkevidde)
-```
+**Visuell audit (ECC `design-system`): 8,2/10.** Uendret fra forrige runde bortsett fra tilgjengelighet (8 → 6,5 etter kontrastmålingen). Snittet går dermed ned fra 8,3.
 
 ---
 
-## Del C – Teknisk revisjon
+## Det som er bra ✅
 
-### 🔴 Kritisk
-
-#### K1. Serveren finner ikke filene. `/` gir 404.
-`server.mjs:8` serverer fra `public/`, men `index.html`, `app.js`, `sw.js`, `style.css`, `manifest.webmanifest` og `icons/` ligger i rotmappen. README-en beskriver også `public/` og `Fjern-PWA.zip`, og ingen av dem finnes i repoet.
-
-Verifisert:
-```
-$ PORT=8799 node server.mjs
-$ curl -H "Host: localhost:8799" http://127.0.0.1:8799/   →  404
-```
-**Tiltak:** Flytt de statiske filene til `public/` med `git mv`, slik README-en beskriver. Å peke `publicDir` mot rotmappen er feil løsning, fordi den da også ville servert `server.mjs` og `data/lg-keys.json`.
-
-#### K2. Ubehandlet `error` på UDP-socket kan krasje broen
-`server.mjs:48–63`: Lytteren for `error` fjernes etter `bind`. Hvis `sock.send()` feiler asynkront (Wi-Fi av, `ENETUNREACH`, `EADDRNOTAVAIL` på Android), sender socketen ut et `error`-event uten lytter, og **Node-prosessen avslutter**. Brukeren må da starte broen i Termux på nytt.
-**Tiltak:** Legg på `sock.on('error', …)` for hele levetiden, gi `send` en callback, og lukk socketen i `finally`.
+- Streng lokal sikkerhetsmodell: `127.0.0.1`, Host/Origin-sjekk, hviteliste for IP og kommandoer, CSP, nøkkelfil 0600 og `data/` utenfor git.
+- Alle feil når brukeren på norsk, og interne detaljer blir i loggen.
+- Ingen npm-avhengigheter, også for WebSocket med TLS.
+- Fjernkontrollen passer på én skjerm fra 360×640, med 48 px trykkflater, hold-for-å-gjenta og tilbakemelding per knapp.
+- 12 farge-tokens, 3 radier og 5 skriftstørrelser. Ingen gradienter.
+- 34 tester og CI på to Node-versjoner.
 
 ---
 
-### 🟠 Høy
+## Anbefalt plan og forventet skår
 
-#### H1. Roku: `Rewind`, `FastForward` og `Pause` er ikke gyldige ECP-taster
-`server.mjs:128` sender tastenavnet uendret til `/keypress/{key}`. Roku ECP bruker `Rev`, `Fwd` og `Play`, der `Play` fungerer som play/pause. `Pause` finnes ikke.
-**Tiltak:** Legg inn en mapping for Roku: `{Rewind:'Rev', FastForward:'Fwd', Pause:'Play', Mute:'VolumeMute'}`.
-
-#### H2. LG: Nyere firmware har stengt `ws://:3000`
-`server.mjs:81` kobler bare til `ws://host:3000/`. LG-TV-er med oppdatert webOS (fra ca. 2023) krever `wss://host:3001` med et selvsignert sertifikat. Da får brukeren «Kunne ikke koble til LG TV» uten å få vite hvorfor. Nodes innebygde `WebSocket` kan ikke slå av sertifikatsjekk for én enkelt tilkobling.
-**Tiltak:** Prøv `wss://:3001` først og fall tilbake til `ws://:3000`. Det krever enten `ws`-pakken med `rejectUnauthorized:false` (brudd med «ingen npm») eller en egen TLS-klient. Dokumenter begrensningen i README-en. *Dette må testes på en ekte TV.*
-
-#### H3. Ingen `.gitignore`, og paringsnøkler kan havne i git
-`data/lg-keys.json` inneholder LG-klientnøkler, som gir full kontroll over TV-en. README-en advarer mot å publisere mappen, men ingenting hindrer det.
-**Tiltak:** Legg til en `.gitignore` med `data/` og `node_modules/`, og skriv nøkkelfilen med `mode: 0o600`.
-
----
-
-### 🟡 Middels
-
-| # | Hvor | Funn | Tiltak |
-| --- | --- | --- | --- |
-| M1 | `server.mjs:156` | Interne feilmeldinger lekker til brukeren på engelsk, for eksempel `"The operation was aborted due to timeout"` og `"Expected property name…"` (verifisert). | Egne feilklasser for meldinger brukeren skal se. Map `AbortError`/`TimeoutError`/`SyntaxError` til norsk tekst, og logg resten. |
-| M2 | `server.mjs:117` | LG Mute veksler en lokal boolsk verdi. Hvis noen demper med den vanlige fjernkontrollen, blir tilstanden feil. | Les `ssap://audio/getStatus` eller abonner på lydstatus, eller bruk `setMute` basert på faktisk tilstand. |
-| M3 | `server.mjs:78–109` | LG-tilkoblingen har ingen timeout. Status blir stående på «Venter på paring» for alltid hvis TV-en ikke svarer. | Timeout på for eksempel 30 s, deretter en tydelig feilmelding. Vurder automatisk gjenoppkobling når pekeren lukkes. |
-| M4 | `app.js:106` | `status()` spørres hvert 2,3 s også når appen ligger i bakgrunnen, og det tapper batteri. | Pause på `visibilitychange` og kjør `status()` umiddelbart når appen blir synlig igjen. |
-| M5 | `server.mjs:137` | Roku-tekst sendes tegn for tegn, sekvensielt, med opptil 2,6 s timeout per tegn. 140 tegn kan ta flere minutter og blokkere forespørselen. | Kortere timeout per tegn, avbryt ved første feil, og vurder en lavere grense. |
-| M6 | `server.mjs` generelt | Broen har ingen autentisering. Andre apper på samme telefon kan sende kommandoer til `127.0.0.1:8765`. Risikoen er lav, men reell på Android. | Valgfritt: token som genereres ved oppstart og settes i en `HttpOnly` SameSite-cookie når `index.html` leveres. |
-| M8 | `server.mjs:152` | Ingen sikkerhetshoder (`security-review` §5). Mangler `Content-Security-Policy`, `X-Content-Type-Options: nosniff` og `Referrer-Policy`. | Legg til `default-src 'self'; connect-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'` og de to andre hodene på alle svar. Appen bruker ingen inline-skript, så CSP-en kan være streng. |
-| M9 | `server.mjs:127`, `app.js:84` | Ingen rate limiting eller lås på `/api/scan` (`security-review` §7). Flere faner eller dobbeltklikk kan starte parallelle SSDP-søk med hver sin socket i 4,5 s. | Del ett pågående søk: gjenbruk samme `Promise` så lenge det kjører. |
-| M7 | `app.js:4` | `localStorage.setItem` er ikke pakket i try/catch. Det kan kaste unntak i privat modus eller når lagringen er full. | Pakk inn i try/catch. |
-
----
-
-### 🔵 Lav
-
-1. **Krav til Node-versjon:** Den globale `WebSocket` krever Node ≥ 22. Dokumenter dette i README-en og sjekk versjonen ved oppstart.
-2. **Manifest:** `"lang": "no"` bør være `"nb"`. Ikonene 48–384 mangler `purpose`, noe som er greit, men manifestet mangler `screenshots` og `categories` (Chrome viser et rikere installasjonsvindu med dem).
-3. **Meta:** `apple-mobile-web-app-capable` er utdatert. Legg til `<meta name="mobile-web-app-capable" content="yes">`.
-4. **Service worker:** Cachenavnet `fjern-pwa-v1` byttes aldri. Siden strategien er network-first, er det greit nå, men versjonen bør knyttes til releaser. Hvis `/` gir 404 (K1), feiler `install`, og appen blir ikke installerbar.
-5. **Tastatur:** `Enter` på en fokusert knapp sender `Select` til TV-en i stedet for å trykke på knappen (`app.js:96–100`). Hopp over dette når `e.target` er en `button`.
-6. **Race:** `connect()` ved oppstart og `status()`-polling går parallelt. Status kan kort vise gammel tilstand.
-7. **Kodestil:** `server.mjs` og `app.js` er sterkt minifisert for hånd, med mange setninger per linje. Det gjør revisjon, diff og feilsøking vanskelig. Kjør Prettier eller skriv om til lesbar form.
-8. **Tilgjengelighet (`frontend-a11y`):** Dekorative symboler (`◉ ▣ ⓘ ⌂ ↶ ↗ ↻`) mangler `aria-hidden="true"` og blir lest opp av skjermleser. Aktiv fane i bunnmenyen mangler `aria-current="page"`. Statusteksten kuttes med ellipse (`max-width:55vw`), så lange feilmeldinger blir uleselige. Tekst på 10–11 px er i minste laget på mobil.
-9. **Kvalitetssikring:** Prosjektet har ingen `package.json`, tester, lint eller CI. Minimum er `node --check` og noen enhetstester med `node:test` for `validIp`, `validDevice`, path-sjekken og API-rutingen, i en GitHub Actions-jobb.
-
----
-
-### Det som er bra ✅
-
-- Binder kun til `127.0.0.1`, og Host- og Origin-sjekken blokkerer DNS-rebinding og CSRF fra nettsider.
-- IP-hvitelisten (RFC 1918) begrenser SSRF til lokalnettet og faste porter.
-- Beskyttelse mot path traversal med `path.resolve` og prefikssjekk.
-- Forespørsler er begrenset til 16 KB, og kommandoer valideres mot en hviteliste.
-- Frontenden bruker bare `textContent` og `createElement`, altså ingen `innerHTML`.
-- Bekreftelsesdialog før strøm av, og tydelig norsk tekst i feil- og hjelpemeldinger (slagordene er et eget problem, se del A2).
-- `generation`-telleren håndterer at en ny tilkobling erstatter en gammel på en ryddig måte.
-
----
-
-## Del D – Handlingsplan og forventet skår
-
-| Fase | Innhold | Funn | Forventet skår |
-| --- | --- | --- | --- |
-| **1. Få det til å kjøre** | Flytt statiske filer til `public/`, `.gitignore`, oppdater README | K1, H3 | ~55 |
-| **2. Robusthet** | UDP-feil, norske feilmeldinger, LG-timeout, `localStorage` try/catch, CSP-hoder, søkelås | K2, M1, M3, M7, M8, M9 | ~65 |
-| **3. Redesign** | Ny layout (del B), tokens, typeskala, SVG-ikoner, nytt app-ikon, mikrotekst, tilgjengelighet | Del A, lav nr. 8 | ~80 |
-| **4. Protokoll** | Roku-tastemapping, LG mute-status, Roku-tekst, `wss://:3001` for LG | H1, H2, M2, M5 | ~85 |
-| **5. Kvalitet** | Lesbar kode, `package.json`, `node:test`, GitHub Actions, polling-pause, manifest | M4, M6, lav nr. 1–7, 9 | 85–90 |
-
-Fase 3 er den som flytter inntrykket fra «AI-laget» til «bevisst designet». Anbefalingen er å gjøre fase 1–2 først (små og trygge), og så redesignet som én samlet endring med før/etter-skjermbilder.
-
----
-
-## Del E – Etter utbedring (v2.0.0)
-
-### Ny totalskår: **83 / 100** (før: 47)
-
-| # | Område | Før | Etter | Hva ble gjort |
+| Fase | Innhold | Funn | Innsats | Forventet |
 | --- | --- | --- | --- | --- |
-| 1 | Funksjon og korrekthet | 4 | 8 | Filene ligger i `public/`. Riktige Roku ECP-taster (`Rev`, `Fwd`, `Play`). LG prøver `wss://:3001` og faller tilbake til `ws://:3000`. |
-| 2 | Sikkerhet | 7,5 | 9 | Streng CSP og sikkerhetshoder på alle svar, `.gitignore` for `data/`, nøkkelfil med 0600 og atomisk skriving. |
-| 3 | Robusthet og feilhåndtering | 4,5 | 8,5 | UDP-feil krasjer ikke lenger broen. Alle feil oversettes til norsk, interne detaljer logges bare i Termux. LG har tidsavbrudd på tilkobling, paring og kommandoer. Ett TV-søk om gangen. |
-| 4 | Visuell kvalitet og konsistens | 5 | 8,5 | 12 farge-tokens (før 62 rå farger), 3 radier (før 9), 5 skriftstørrelser (før 17), 0 gradienter (før 7). |
-| 5 | Egenart (fravær av AI-preg) | 3 | 8 | Alle ti AI-mønstre i del A2 er fjernet. |
-| 6 | UX og informasjonsarkitektur | 5 | 8,5 | Hele fjernkontrollen passer på én skjerm fra 360×640. Hold-for-å-gjenta, tilbakemelding per knapp, én samlet TV-liste med hjelp. |
-| 7 | Tilgjengelighet | 6 | 8 | Alle knapper har navn (verifisert: 0 uten), ikoner er `aria-hidden`, minst 48 px trykkflate og 12 px tekst, Enter på fokusert knapp trykker knappen. |
-| 8 | PWA og ytelse | 6,5 | 8,5 | SVG-ikon, maskerbare ikoner, skjermbilder i manifestet, `lang: nb`. Pauser statussjekk når appen er skjult. Service worker v2 med reserve ved frakobling. |
-| 9 | Kodekvalitet og vedlikehold | 4 | 8 | Lesbar kode i moduler (`lib/`), avhengighetsinjeksjon for testing, egen WebSocket-klient uten npm. |
-| 10 | Test, CI og dokumentasjon | 2,5 | 8 | 34 tester (`node:test`), GitHub Actions på Node 20 og 22, ny README. |
+| **A. Raske rettelser** | Roku-pause og kanalvisning via capabilities, Roku-helsesjekk, nøkkellager-kø, grenser for SSDP og svarstørrelse, CSP, «Kanal» | H1, H2, M2, M6, L1, L3, L5 | Liten | ~84 |
+| **B. Trygghet og tilgjengelighet** | TLS-låsing (TOFU), LG-gjenoppkobling, kantkontrast, skjermleserkunngjøring, touch-callout | H3, M1, M3, L4, L7 | Middels | ~87 |
+| **C. Funksjon og design** | Slå på (WOL/PowerOn), bruk av toppfeltet (kilder/apper), slettedialog i arket, Slett-knapp for tekst | M4, M5, L2, L8 | Middels–stor | ~90 |
+| **D. Kvalitetssikring** | Tester for grensesnittlogikk, TLS-test i CI, test av cacheversjon, `.editorconfig` | M7, L6, L9 | Liten | ~91 |
+| **E. Ekte TV-er** | Ende-til-ende på Roku og LG, TalkBack | – | Krever deg og TV-ene | 92+ |
 
-**Production audit (ECC): 80/100, «launchable with caveats»** (før: 40, blokkert). Taket er 84 inntil CI er grønn på `main` og appen er testet ende til ende mot ekte TV-er.
-
-### Design etter (ECC `design-system`)
-
-| Dimensjon | Før | Etter |
-| --- | --- | --- |
-| Fargekonsistens | 3 | 9 |
-| Typografisk hierarki | 5 | 8 |
-| Avstandsrytme | 4 | 9 |
-| Komponentkonsistens | 5 | 9 |
-| Responsivitet | 6 | 8 |
-| Mørk modus | 7 | 8 |
-| Animasjon | 6 | 8 |
-| Tilgjengelighet | 6 | 8 |
-| Informasjonstetthet | 4 | 8 |
-| Polish | 6 | 8 |
-| **Snitt** | **5,2** | **8,3** |
-
-### AI-mønstrene (del A2): status
-
-| # | Mønster | Status |
-| --- | --- | --- |
-| 1 | Todelt heltoverskrift | Fjernet. Første skjerm er fjernkontrollen. |
-| 2 | Eyebrows med sperret tekst | Fjernet. |
-| 3 | Markedsføringstekst i verktøyet | Fjernet. Bare konkrete verb og korte hjelpetekster. |
-| 4 | Navy + gull med gradienter og glød | Byttet til grafitt med én funksjonell aksent (oransje), ingen gradienter. |
-| 5 | Kort i kort | Fjernet. Knappegrupper står direkte på bakgrunnen. |
-| 6 | `↗` på alle knapper | Fjernet. |
-| 7 | Nummererte trinnkort | Erstattet av en kort nummerert liste i en sammenleggbar «Slik kobler du til». |
-| 8 | 3D-rendret app-ikon | Erstattet av et flatt SVG-ikon (d-pad-ring med oransje OK) som er skarpt ned til 32 px. |
-| 9 | Unicode-symboler som ikoner | Erstattet av ett inline SVG-sett (1,75 px strek, 24 px rutenett). |
-| 10 | Fontstabel med Inter som aldri lastes | Ærlig systemfont (Roboto på Android), monospace med tabulære tall for IP-adresser. |
-
-### Skjermbilder etter (390×844 og 360×640)
-
-| Kontroll | Ingen TV | TV-er | Paring | 360×640 |
-| --- | --- | --- | --- | --- |
-| ![](docs/revisjon/etter/01-kontroll.png) | ![](docs/revisjon/etter/02-ingen-tv.png) | ![](docs/revisjon/etter/03-tv-er.png) | ![](docs/revisjon/etter/07-paring.png) | ![](docs/revisjon/etter/08-liten-skjerm-360x640.png) |
-
-Flere i [`docs/revisjon/etter/`](docs/revisjon/etter/): hjelp, IP-dialog og tilstand uten bro.
-
-### Teknisk status
-
-| Funn | Status |
-| --- | --- |
-| K1 `public/` mangler | ✅ Filene er flyttet. Test: `serverer appen fra public/`. |
-| K2 UDP-krasj | ✅ `lib/ssdp.mjs` har feillytter hele levetiden og lukker i `finally`. |
-| H1 Roku-taster | ✅ `ROKU_KEYS` med test for alle kommandoer. |
-| H2 LG `wss://:3001` | ✅ Egen WebSocket-klient (`lib/ws-client.mjs`). Verifisert mot TLS-server med selvsignert sertifikat. **Ikke testet mot ekte LG-TV.** |
-| H3 Nøkler i git | ✅ `.gitignore` og filmodus 0600. |
-| M1 Engelske feil | ✅ `lib/errors.mjs`. |
-| M2 Mute i utakt | ✅ Leser `ssap://audio/getStatus` før `setMute`, med MUTE-knapp som reserve. |
-| M3 LG uten tidsavbrudd | ✅ Tilkobling 5 s, paring 30 s, kommandoer 4 s. |
-| M4 Polling i bakgrunnen | ✅ Pauser på `visibilitychange`. |
-| M5 Treg Roku-tekst | ✅ 1,2 s per tegn, stopper ved første feil. |
-| M6 Andre apper på telefonen | ⚠️ Akseptert risiko, dokumentert i README. En token kan ikke skilles fra en annen lokal app uten innlogging. |
-| M7 `localStorage` | ✅ Pakket i try/catch. |
-| M8 Sikkerhetshoder | ✅ CSP, `nosniff`, `no-referrer`, COOP og Permissions-Policy. |
-| M9 Parallelle søk | ✅ Delt `Promise`. |
-| Lav 1–9 | ✅ Node ≥ 20, manifest, meta, SW-versjon, tastatur, race ved oppstart, lesbar kode, tilgjengelighet og tester/CI. |
-
-### Gjenstår før 85+
-
-1. **Test på ekte TV-er:** Roku (tastene, tekst) og LG (paring via `wss://:3001`, pekersocket, mute). Dette kan ikke gjøres fra skyen.
-2. **Grønn CI på `main`** etter sammenslåing.
-3. **Skjermlesertest med TalkBack** på Android.
-4. Valgfritt: nettleserbasert E2E-test (Playwright) i CI. Den ble kjørt lokalt under arbeidet, men ikke lagt inn, for å holde prosjektet uten npm-avhengigheter.
-
+Fase A og B gir mest per time. Fase C er den største designendringen og bør avklares før den bygges: hva skal toppfeltet brukes til?
