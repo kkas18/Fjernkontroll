@@ -76,6 +76,17 @@ class Bridge(
         return running.await()
     }
 
+    /** Appen er tilbake i forgrunnen, eller nettverket er tilbake: sørg for at LG-forbindelsen lever. */
+    suspend fun onForeground() {
+        val device = lock.withLock { selected } ?: return
+        if (device.type == "lg") lg.ensureConnected(device.host)
+        else rokuHealth = Triple(null, false, 0L) // tving ny helsesjekk
+    }
+
+    suspend fun onBackground() {
+        if (lock.withLock { selected }?.type == "lg") lg.pauseReconnect()
+    }
+
     /** Hovedinngang: rute og eventuell JSON-kropp inn, status og JSON ut. */
     suspend fun handle(route: String, body: String?): Pair<Int, JSONObject> = try {
         200 to dispatch(route, body?.let { JSONObject(it) })

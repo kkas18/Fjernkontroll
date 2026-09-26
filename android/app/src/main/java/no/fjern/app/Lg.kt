@@ -233,7 +233,7 @@ class LgSession(
 
     private data class Auto(val attempt: Int, val delays: List<Long>, val message: String)
 
-    private suspend fun request(uri: String, payload: JSONObject? = null): JSONObject? {
+    private suspend fun request(uri: String, payload: JSONObject? = null, timeoutMs: Long = requestTimeoutMs): JSONObject? {
         val socket = control
         if (socket == null || !socket.open) throw UserError(status, 409)
         val id = "req_${sequence.incrementAndGet()}"
@@ -243,7 +243,7 @@ class LgSession(
         if (payload != null) message.put("payload", payload)
         socket.ws.send(message.toString())
         return try {
-            withTimeout(requestTimeoutMs) { deferred.await() }
+            withTimeout(timeoutMs) { deferred.await() }
         } catch (e: TimeoutCancellationException) {
             pending.remove(id)
             throw UserError("LG TV svarte ikke på kommandoen.", 504)
@@ -415,6 +415,36 @@ class LgSession(
     }
 
     suspend fun connect(target: String) = withContext(state) { connectLocked(target) }
+
+    /**
+     * Kalles når appen kommer i forgrunnen eller nettverket kommer tilbake. Android fryser appen i
+     * bakgrunnen, og TV-en lukker da forbindelsen uten at vi merker det. Sjekk at den lever, og koble
+     * til på nytt med lagret nøkkel hvis ikke (ingen ny godkjenning på TV-en).
+     */
+    suspend fun ensureConnected(target: String) = withContext(state) {
+        if (host == target && status in setOf(CONNECTING, PAIRING, PREPARING, WAKING)) return@withContext
+        // Tilstander som krever at brukeren gjør noe, skal ikke gi nye forespørsler på TV-en av seg selv.
+        if (host == target && status in setOf(CERT_CHANGED, REJECTED, PAIRING_TIMEOUT, NO_POINTER)) return@withContext
+        if (ready && host == target) {
+            val alive = try {
+                request("ssap://audio/getStatus", timeoutMs = 1500)
+                pointer?.open == true
+            } catch (_: Exception) {
+                false
+            }
+            if (alive) return@withContext
+            log("LG: forbindelsen svarte ikke etter pause, kobler til igjen")
+        } else {
+            log("LG: kobler til igjen etter pause")
+        }
+        connectLocked(target, Auto(0, reconnectDelays, RECONNECTING))
+    }
+
+    /** I bakgrunnen: ikke bruk batteri på gjenoppkoblingsforsøk som Android uansett blokkerer. */
+    suspend fun pauseReconnect() = withContext(state) {
+        reconnectJob?.cancel()
+        Unit
+    }
 
     private fun pressButton(name: String) {
         val socket = pointer

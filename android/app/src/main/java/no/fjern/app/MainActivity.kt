@@ -1,6 +1,10 @@
 package no.fjern.app
 
 import android.annotation.SuppressLint
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.util.Log
@@ -19,12 +23,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var webView: WebView
     private lateinit var lg: LgSession
+    private lateinit var bridge: Bridge
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     companion object {
         private const val HOST = "appassets.androidplatform.net"
@@ -54,7 +61,7 @@ class MainActivity : ComponentActivity() {
         val keyStore = KeyStore(File(filesDir, "lg-keys.json"))
         lg = LgSession(keyStore, scope, ::log)
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager
-        val bridge = Bridge(lg, Ssdp(wifi), scope, ::log, about = "Fjern ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        bridge = Bridge(lg, Ssdp(wifi), scope, ::log, about = "Fjern ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
 
         webView = WebView(this)
         webView.setBackgroundColor(getColor(R.color.bg))
@@ -111,6 +118,31 @@ class MainActivity : ComponentActivity() {
         })
 
         if (savedInstanceState == null) webView.loadUrl(START) else webView.restoreState(savedInstanceState)
+
+        // Når Wi‑Fi kommer tilbake (f.eks. etter dvale), koble til TV-en igjen.
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                scope.launch { bridge.onForeground() }
+            }
+        }.also { callback ->
+            runCatching {
+                connectivity.registerNetworkCallback(
+                    NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),
+                    callback,
+                )
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        scope.launch { bridge.onForeground() }
+    }
+
+    override fun onStop() {
+        scope.launch { bridge.onBackground() }
+        super.onStop()
     }
 
     /** Legger sikkerhetshoder på alle filer fra assets. */
@@ -129,6 +161,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        networkCallback?.let { callback -> runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(callback) } }
         scope.cancel()
         webView.destroy()
         super.onDestroy()
