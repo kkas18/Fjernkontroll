@@ -4,6 +4,8 @@
 **Omfang:** Hele repoet: `server.mjs`, `lib/`, `public/`, `tests/`, CI, dokumentasjon.
 **Forrige revisjon:** [`docs/revisjon/REVISJON-v1.md`](docs/revisjon/REVISJON-v1.md) (v1: 47/100, egenvurdert etter utbedring: 83/100).
 
+> **Status:** Alle funn i denne runden er utbedret i versjon 2.1.0. Seksjonene under beskriver v2.0.0 **før** utbedring. **[Etter utbedring](#etter-utbedring-v210)** viser resultatet: **79 → 87 / 100**.
+
 ## Metode
 
 Samme rammeverk som i første runde, slik at skårene kan sammenlignes: ECC-skillsene `production-audit`, `security-review`, `error-handling`, `design-system` (10 dimensjoner + «AI slop»), `frontend-design-direction`, `make-interfaces-feel-better`, `frontend-a11y` og `verification-loop`.
@@ -139,3 +141,54 @@ Forrige runde anslo 83 rett etter utbedringen. Med en strengere gjennomgang land
 | **E. Ekte TV-er** | Ende-til-ende på Roku og LG, TalkBack | – | Krever deg og TV-ene | 92+ |
 
 Fase A og B gir mest per time. Fase C er den største designendringen og bør avklares før den bygges: hva skal toppfeltet brukes til?
+
+---
+
+## Etter utbedring (v2.1.0)
+
+### Ny totalskår: **87 / 100** (før: 79)
+
+| # | Område | v2.0 | v2.1 | Hva ble gjort |
+| --- | --- | --- | --- | --- |
+| 1 | Funksjon og korrekthet | 7,5 | 8,5 | Roku viser én ⏯-knapp, kanalvelgeren skjules på Roku-spillere, «Slå på» for Roku-TV og LG (Wake-on-LAN), apper fra TV-en, «Slett tegn». |
+| 2 | Sikkerhet | 8,5 | 9,5 | Sertifikatlåsing for LG (TOFU) uten nedgradering til `ws://`, tak på SSDP og svarstørrelse, strammere CSP. |
+| 3 | Robusthet | 7,5 | 9 | Helsesjekk for Roku, automatisk gjenoppkobling for LG, kø i nøkkellageret. |
+| 4 | Visuell kvalitet | 8,5 | 8,5 | Uendret uttrykk. Nye elementer følger samme tokens. |
+| 5 | Egenart | 8 | 8,5 | Toppfeltet brukes til apper fra TV-en i stedet for å stå tomt. |
+| 6 | UX | 7,5 | 8,5 | Ark i stedet for `confirm()`, «Prøv igjen» og «Par på nytt» direkte i statuslinjen, strømark med forklaring. |
+| 7 | Tilgjengelighet | 7 | 8,5 | Knappekanter 3,1:1, skjermleserkunngjøring ved tilkobling, `touch-callout`. |
+| 8 | PWA og ytelse | 8,5 | 8,5 | Cacheversjon knyttet til `package.json`. |
+| 9 | Kodekvalitet | 8 | 8,5 | Ren logikk skilt ut i `public/logic.js`, `.editorconfig`. |
+| 10 | Test, CI og dokumentasjon | 7,5 | 9 | 54 tester (før 34), inkludert TLS med ekte sertifikat, grensesnittlogikk og cacheversjon. |
+
+**Production audit (ECC): 84/100.** Dette er taket til appen er testet mot ekte TV-er.
+
+### Funnstatus
+
+| Funn | Status | Verifisert med |
+| --- | --- | --- |
+| H1 Roku-pause | ✅ | `server.test`: capabilities `playPause: 'toggle'`. Chromium: bare «Spill av eller pause» vises for Roku. |
+| H2 Roku alltid klar | ✅ | `server.test`: status blir `ready: false`, `code: 'unreachable'` når TV-en ikke svarer. |
+| H3 TLS uten låsing | ✅ | `ws-client.test`: avtrykk mot ekte selvsignert sertifikat, avvisning ved feil avtrykk. `lg.test`: endret sertifikat stopper tilkoblingen før nøkkelen sendes, og en låst TV prøver aldri `ws://`. |
+| M1 LG-gjenoppkobling | ✅ | `lg.test`: ny tilkobling etter at forbindelsen faller ut (1, 2, 4, 8, 16 s). |
+| M2 Race i nøkkellager | ✅ | `lg.test`: 10 samtidige skrivinger, alle lagret, ingen `.tmp`-rester, filmodus 0600. |
+| M3 Kantkontrast | ✅ | `--line: #606166` gir 3,1:1 mot bakgrunnen. |
+| M4 Slå på | ✅ | `lg.test`: Wake-on-LAN til lagret MAC og automatisk tilkobling etterpå. Riktig pakkeformat (102 byte). |
+| M5 Tomt toppfelt | ✅ | Apper fra TV-en fyller feltet og ruller ved behov. Skjermbilde `runde2/01-lg-apper.png`. |
+| M6 Ubegrenset input | ✅ | `roku-ssdp.test`: 300 falske SSDP-svar gir 32 enheter, svar over 64 KB avvises. |
+| M7 Tester for grensesnitt og TLS | ✅ | `logic.test` og TLS-test i `ws-client.test`. Kjører i CI. |
+| L1–L9 | ✅ | Kanal skjules, arkdialog for sletting, «Kanal», kunngjøring, `img-src 'self'`, versjonstest, `touch-callout`, «Slett tegn», `.editorconfig`. |
+
+### Skjermbilder (v2.1.0)
+
+| LG med apper | Roku | Sertifikat endret | Strøm | 360×640 |
+| --- | --- | --- | --- | --- |
+| ![](docs/revisjon/runde2/01-lg-apper.png) | ![](docs/revisjon/runde2/02-roku.png) | ![](docs/revisjon/runde2/03-sertifikat-endret.png) | ![](docs/revisjon/runde2/04-strom.png) | ![](docs/revisjon/runde2/08-360x640.png) |
+
+### Gjenstår før 90+
+
+1. **Test mot ekte TV-er:** LG-paring over `wss://:3001`, sertifikatlåsing, Wake-on-LAN, applisten og gjenoppkobling etter standby. Roku: `PowerOn`, `is-tv`, applisten og ⏯. Dette er den største gjenværende risikoen.
+2. **TalkBack** på Android.
+3. **Nettleserbasert E2E i CI** (Playwright). Den er kjørt lokalt i hver runde, men ikke lagt inn, for å holde prosjektet uten npm-avhengigheter.
+4. **Oppgradering fra 2.0:** LG-TV-er kan be om godkjenning én gang til på grunn av nye tillatelser (apper og nettverksinfo). Dette står i README.
+

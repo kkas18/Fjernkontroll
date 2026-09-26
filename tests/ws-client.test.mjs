@@ -130,3 +130,46 @@ test('tidsavbrudd når serveren aldri svarer', async () => {
   await assert.rejects(openWebSocket(`ws://127.0.0.1:${server.address().port}/`, { timeout: 100 }), (e) => e.name === 'TimeoutError');
   server.close();
 });
+
+// wss:// mot et selvsignert sertifikat, slik LG-TV-er bruker. Sertifikatet lages ved kjøring.
+test('wss: selvsignert sertifikat, avtrykk og låsing', async (t) => {
+  const { execFileSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const tls = await import('node:tls');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fjern-tls-'));
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '1', '-subj', '/CN=lgwebostv'], { stdio: 'ignore' });
+  } catch {
+    t.skip('openssl er ikke tilgjengelig');
+    return;
+  }
+  const cert = fs.readFileSync(path.join(dir, 'c.pem'));
+  const sockets = new Set();
+  const server = tls.createServer({ key: fs.readFileSync(path.join(dir, 'k.pem')), cert }, (socket) => {
+    sockets.add(socket);
+    socket.once('data', (data) => {
+      const key = /sec-websocket-key:\s*(.+)/i.exec(data.toString())[1].trim();
+      const digest = crypto.createHash('sha1').update(key + GUID).digest('base64');
+      socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${digest}\r\n\r\n`);
+      socket.write(frame(1, 'hei'));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `wss://127.0.0.1:${server.address().port}/`;
+  const expected = new crypto.X509Certificate(cert).fingerprint256;
+  try {
+    await assert.rejects(openWebSocket(url, { timeout: 2000 }), 'streng TLS avviser selvsignert sertifikat');
+    const client = await openWebSocket(url, { timeout: 2000, insecureTls: true });
+    assert.equal(client.peerFingerprint, expected);
+    client.close();
+    const pinned = await openWebSocket(url, { timeout: 2000, insecureTls: true, expectFingerprint: expected });
+    pinned.close();
+    await assert.rejects(openWebSocket(url, { timeout: 2000, insecureTls: true, expectFingerprint: 'AA:BB' }), (e) => e.name === 'CertificateMismatch');
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

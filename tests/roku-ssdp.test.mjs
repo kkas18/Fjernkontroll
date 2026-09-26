@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ROKU_KEYS, rokuCommand, rokuProbe, rokuText } from '../lib/roku.mjs';
+import { MAX_RESPONSE_BYTES, ROKU_KEYS, parseRokuApps, readLimited, rokuCommand, rokuProbe, rokuText } from '../lib/roku.mjs';
 import { COMMANDS } from '../lib/validate.mjs';
-import { classify, createDiscovery } from '../lib/ssdp.mjs';
+import { MAX_DEVICES, classify, createCollector, createDiscovery } from '../lib/ssdp.mjs';
 import { UserError } from '../lib/errors.mjs';
 
 function fakeFetch(handler) {
@@ -43,8 +43,10 @@ test('rokuText sender tegn for tegn og stopper ved første feil', async () => {
 });
 
 test('rokuProbe leser og dekoder navnet', async () => {
-  const { impl } = fakeFetch(() => ok('<device-info><user-device-name>Stue &amp; kjøkken</user-device-name></device-info>'));
-  assert.deepEqual(await rokuProbe('192.168.1.5', { fetchImpl: impl }), { type: 'roku', host: '192.168.1.5', name: 'Stue & kjøkken' });
+  const { impl } = fakeFetch(() => ok('<device-info><user-device-name>Stue &amp; kjøkken</user-device-name><is-tv>true</is-tv></device-info>'));
+  assert.deepEqual(await rokuProbe('192.168.1.5', { fetchImpl: impl }), { type: 'roku', host: '192.168.1.5', name: 'Stue & kjøkken', isTv: true });
+  const player = fakeFetch(() => ok('<device-info><is-tv>false</is-tv></device-info>'));
+  assert.equal((await rokuProbe('192.168.1.6', { fetchImpl: player.impl })).isTv, false);
 });
 
 test('rokuProbe oversetter nettverksfeil til norsk', async () => {
@@ -67,3 +69,26 @@ test('samtidige søk deler ett SSDP-søk', async () => {
   assert.ok(Array.isArray(await first));
   assert.notEqual(discover(), first, 'nytt søk etter at det forrige er ferdig');
 });
+
+test('store svar fra lokalnettet avvises', async () => {
+  const big = 'x'.repeat(MAX_RESPONSE_BYTES + 1);
+  await assert.rejects(readLimited({ text: async () => big }), UserError);
+  const stream = new Response(big);
+  await assert.rejects(readLimited(stream), UserError);
+  assert.equal(await readLimited(new Response('liten')), 'liten');
+});
+
+test('Roku-applisten parses med gyldige id-er og tak', () => {
+  const xml = '<apps><app id="12" type="appl">Netflix</app><app id="837" type="appl">YouTube &amp; mer</app><app id="bad id" type="appl">X</app></apps>';
+  assert.deepEqual(parseRokuApps(xml), [{ id: '12', name: 'Netflix' }, { id: '837', name: 'YouTube & mer' }]);
+  const many = Array.from({ length: 100 }, (_, i) => `<app id="${i}">A${i}</app>`).join('');
+  assert.equal(parseRokuApps(many).length, 48);
+});
+
+test('SSDP-søket godtar maks 32 enheter, uten duplikater', () => {
+  const collector = createCollector();
+  for (let i = 0; i < 300; i++) collector.add('ST: roku:ecp', `192.168.${i >> 8}.${i & 255}`);
+  collector.add('ST: roku:ecp', '192.168.0.0');
+  assert.equal(collector.devices().length, MAX_DEVICES);
+});
+
