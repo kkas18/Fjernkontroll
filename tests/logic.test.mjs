@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { BRIDGE_DOWN, isPrivateIPv4, isValidDevice, newDevices, noticeFor, rememberDevice, transportMode } from '../public/logic.js';
+import { BRIDGE_DOWN, defaultFavorites, displayName, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode } from '../public/logic.js';
 import { isPrivateIPv4 as serverIsPrivate } from '../lib/validate.mjs';
 
 test('klient og bro er enige om hva som er en lokal IP', () => {
@@ -42,6 +42,8 @@ test('lister: nye enheter og huske sist brukte først', () => {
   const b = { type: 'lg', host: '192.168.1.3', name: 'B' };
   assert.deepEqual(newDevices([a, b], [a]), [b]);
   assert.deepEqual(rememberDevice([a, b], { ...b, isTv: true }), [b, a], 'lagrer bare type, host og navn');
+  const renamed = [{ ...a, customName: 'Stue' }];
+  assert.deepEqual(rememberDevice(renamed, { ...a, name: 'Roku Ultra' }), [{ ...a, name: 'Roku Ultra', customName: 'Stue' }], 'brukerens navn beholdes');
 });
 
 test('service worker-cachen følger versjonen i package.json', () => {
@@ -50,3 +52,43 @@ test('service worker-cachen følger versjonen i package.json', () => {
   assert.match(sw, new RegExp(`const CACHE = 'fjern-${version.replace(/\./g, '\\.')}';`));
   for (const file of ['app.js', 'logic.js', 'style.css']) assert.ok(sw.includes(`'/${file}'`), `${file} er forhåndslagret`);
 });
+
+// Applisten fra brukerens LG-TV (runde 3).
+const TV_APPS = ['Apps', 'YouTube', 'LG Channels', 'Netflix', 'NRK TV', 'Telia Play', 'Hjemmehubb', 'Nettleser', 'Mediespiller',
+  'Amazon Alexa', 'Sport', 'Developer Mode', 'Kamera', 'LG Gallery+', 'Live TV'].map((name, i) => ({ id: `a${i}`, name, system: false }));
+
+test('favoritter: kjente strømmeapper velges som standard', () => {
+  assert.deepEqual(favoriteApps(TV_APPS, undefined).map((a) => a.name), ['YouTube', 'Netflix', 'NRK TV', 'Telia Play']);
+  assert.deepEqual(defaultFavorites([{ id: 'x', name: 'Ukjent app' }]), ['x'], 'ingen kjente apper: de første vanlige');
+});
+
+test('favoritter: brukerens valg, rekkefølge og tak', () => {
+  let stored = toggleFavorite(TV_APPS, undefined, 'a1');
+  assert.deepEqual(stored, ['a3', 'a4', 'a5'], 'YouTube fjernet');
+  stored = toggleFavorite(TV_APPS, stored, 'a14');
+  assert.deepEqual(favoriteApps(TV_APPS, stored).map((a) => a.name), ['Netflix', 'NRK TV', 'Telia Play', 'Live TV']);
+  assert.deepEqual(favoriteApps(TV_APPS, ['finnes-ikke', 'a3']).map((a) => a.id), ['a3'], 'apper som er borte hoppes over');
+  let many = [];
+  for (const app of TV_APPS) many = toggleFavorite(TV_APPS, many, app.id);
+  assert.equal(many.length, MAX_FAVORITES);
+});
+
+test('systemapper sorteres nederst', () => {
+  const { regular, system } = sortApps(TV_APPS);
+  assert.deepEqual(regular.map((a) => a.name), ['YouTube', 'Netflix', 'NRK TV', 'Telia Play']);
+  assert.ok(system.some((a) => a.name === 'Developer Mode'));
+  assert.equal(isSystemApp({ name: 'Hva som helst', system: true }), true);
+});
+
+test('bokstavikon og navn', () => {
+  assert.equal(initials('NRK TV'), 'NRK');
+  assert.equal(initials('Netflix'), 'N');
+  assert.equal(initials('telia play'), 'T');
+  assert.equal(normalizeName({ type: 'lg', name: 'LG webOS · 192.168.0.3' }), 'LG-TV');
+  assert.equal(normalizeName({ type: 'roku', name: 'Roku · 192.168.0.9' }), 'Roku');
+  assert.equal(normalizeName({ type: 'lg', name: 'LG OLED55C1' }), 'LG OLED55C1');
+  const tv = { type: 'lg', host: '192.168.0.3', name: 'LG OLED55C1' };
+  assert.equal(displayName(tv, [{ ...tv, customName: 'Stue' }]), 'Stue');
+  assert.equal(displayName(tv, []), 'LG OLED55C1');
+});
+

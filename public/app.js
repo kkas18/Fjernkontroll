@@ -1,6 +1,7 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
 import {
-  BRIDGE_DOWN, isPrivateIPv4, isValidDevice, newDevices, noticeFor, rememberDevice, sameDevice, transportMode, typeLabel,
+  BRIDGE_DOWN, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
+  normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, transportMode, typeLabel,
 } from './logic.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -136,15 +137,16 @@ function announce() {
   const key = state.ready && state.device ? `${state.device.type}:${state.device.host}` : null;
   if (key === state.announcedReady) return;
   state.announcedReady = key;
-  if (key) $('#announce').textContent = `Tilkoblet ${state.device.name}.`;
+  if (key) $('#announce').textContent = `Tilkoblet ${displayName(state.device, state.saved)}.`;
 }
 
 function render() {
   const { device, ready, bridge, capabilities } = state;
-  $('#deviceName').textContent = device?.name || 'Ingen TV';
+  const name = device ? displayName(device, state.saved) : 'Ingen TV';
+  $('#deviceName').textContent = name;
   $('#deviceMeta').hidden = !device;
-  $('#deviceMeta').textContent = device ? `${typeLabel(device.type)} · ${device.host}` : '';
-  $('#deviceButton').setAttribute('aria-label', device ? `${device.name}. Bytt TV` : 'Velg TV');
+  $('#deviceMeta').textContent = device ? device.host : '';
+  $('#deviceButton').setAttribute('aria-label', device ? `${name}, ${typeLabel(device.type)} på ${device.host}. Bytt TV` : 'Velg TV');
   $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code ? 'err' : 'busy') : 'off';
 
   const notice = noticeFor(state);
@@ -168,20 +170,104 @@ function render() {
   announce();
 }
 
+// Favoritter lagres per TV i brukerens rekkefølge.
+const deviceKey = (device) => `${device.type}:${device.host}`;
+function storedFavorites() {
+  return state.device ? storage.read('fjern-favorites', {})[deviceKey(state.device)] : undefined;
+}
+function saveFavorites(ids) {
+  const all = storage.read('fjern-favorites', {});
+  all[deviceKey(state.device)] = ids;
+  storage.write('fjern-favorites', all);
+}
+
+// Ikonet hentes fra TV-en via broen. Til det er lastet (eller hvis det mangler) vises forbokstaver.
+function appIcon(app, size = 'm') {
+  const box = document.createElement('span');
+  box.className = `app-icon ${size}`;
+  box.style.setProperty('--app-color', fallbackColor(app));
+  box.setAttribute('aria-hidden', 'true');
+  box.textContent = initials(app.name);
+  const img = document.createElement('img');
+  img.alt = '';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.src = `/api/icon/${encodeURIComponent(app.id)}?tv=${encodeURIComponent(state.device?.host || '')}`;
+  img.addEventListener('load', () => box.classList.add('has-image'));
+  img.addEventListener('error', () => img.remove());
+  box.append(img);
+  return box;
+}
+
+function favTile(label, icon, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'fav';
+  const text = document.createElement('span');
+  text.className = 'fav-label';
+  text.textContent = label;
+  button.append(icon, text);
+  button.addEventListener('click', onClick);
+  return button;
+}
+
 function renderApps() {
   const visible = state.ready && state.apps.length > 0;
   $('#apps').hidden = !visible;
   if (!visible) return;
-  const tiles = state.apps.map((app) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'app-tile';
-    button.textContent = app.name;
-    button.title = app.name;
-    button.addEventListener('click', () => launch(app, button));
-    return button;
+  const favorites = favoriteApps(state.apps, storedFavorites());
+  const tiles = favorites.map((app) => {
+    const tile = favTile(app.name, appIcon(app), () => launch(app, tile));
+    return tile;
   });
+  const allIcon = document.createElement('span');
+  allIcon.className = 'app-icon m all';
+  allIcon.setAttribute('aria-hidden', 'true');
+  allIcon.append(svgIcon('grid'));
+  tiles.push(favTile('Alle apper', allIcon, openAllApps));
   $('#appGrid').replaceChildren(...tiles);
+}
+
+function appRow(app, favoriteIds) {
+  const li = document.createElement('li');
+  li.className = 'app-row';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'app-open';
+  const name = document.createElement('span');
+  name.textContent = app.name;
+  open.append(appIcon(app, 's'), name);
+  open.addEventListener('click', () => {
+    $('#appsSheet').close();
+    launch(app, null);
+  });
+  const star = document.createElement('button');
+  star.type = 'button';
+  star.className = 'app-star';
+  const isFavorite = favoriteIds.includes(app.id);
+  star.setAttribute('aria-pressed', String(isFavorite));
+  star.setAttribute('aria-label', isFavorite ? `Fjern ${app.name} fra favoritter` : `Legg ${app.name} til favoritter`);
+  star.append(svgIcon('star'));
+  star.addEventListener('click', () => {
+    saveFavorites(toggleFavorite(state.apps, storedFavorites(), app.id));
+    renderAllApps();
+    renderApps();
+  });
+  li.append(open, star);
+  return li;
+}
+
+function renderAllApps() {
+  const favoriteIds = favoriteApps(state.apps, storedFavorites()).map((app) => app.id);
+  const { regular, system } = sortApps(state.apps);
+  $('#allApps').replaceChildren(...regular.map((app) => appRow(app, favoriteIds)));
+  $('#systemApps').replaceChildren(...system.map((app) => appRow(app, favoriteIds)));
+  $('#systemAppsTitle').hidden = system.length === 0;
+}
+
+function openAllApps() {
+  renderAllApps();
+  $('#appsSheet').showModal();
 }
 
 function deviceItem(device, { stored }) {
@@ -193,7 +279,7 @@ function deviceItem(device, { stored }) {
   select.className = 'device-select';
   if (sameDevice(device, state.device)) select.setAttribute('aria-current', 'true');
   const name = document.createElement('strong');
-  name.textContent = device.name;
+  name.textContent = displayName(device, state.saved);
   const detail = document.createElement('small');
   detail.className = 'mono';
   detail.textContent = `${typeLabel(device.type)} · ${device.host}`;
@@ -205,6 +291,14 @@ function deviceItem(device, { stored }) {
   li.append(select);
 
   if (stored) {
+    const rename = document.createElement('button');
+    rename.type = 'button';
+    rename.className = 'device-remove';
+    rename.setAttribute('aria-label', `Gi ${displayName(device, state.saved)} nytt navn`);
+    rename.append(svgIcon('edit'));
+    rename.addEventListener('click', () => askRename(device));
+    li.append(rename);
+
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'device-remove';
@@ -284,7 +378,9 @@ async function refreshStatus() {
     if (state.connecting) return;
     if (status.device) {
       applyStatus(status);
-      if (status.ready && !state.saved.some((d) => sameDevice(d, status.device))) remember(status.device);
+      const saved = state.saved.find((d) => sameDevice(d, status.device));
+      // Nytt navn fra TV-en (f.eks. modellnavn) oppdaterer listen, men aldri brukerens eget navn.
+      if (status.ready && (!saved || saved.name !== normalizeName(status.device))) remember(status.device);
     } else if (state.device) {
       // Broen er startet på nytt og har glemt TV-en. Behold valget og tilby ny tilkobling.
       state.ready = false;
@@ -391,10 +487,18 @@ function openDevices({ scanNow = false } = {}) {
   if (scanNow) scan();
 }
 
+let renaming = null;
+function askRename(device) {
+  renaming = device;
+  $('#renameInput').value = state.saved.find((d) => sameDevice(d, device))?.customName || '';
+  $('#renameDialog').showModal();
+  $('#renameInput').focus();
+}
+
 let removing = null;
 function askRemove(device) {
   removing = device;
-  $('#removeText').textContent = `${device.name} fjernes fra listen. Du kan legge den til igjen senere.`;
+  $('#removeText').textContent = `${displayName(device, state.saved)} fjernes fra listen. Du kan legge den til igjen senere.`;
   $('#removeDialog').showModal();
 }
 
@@ -458,6 +562,20 @@ $('#diagCopy').addEventListener('click', async () => {
   }
 });
 
+$('#renameForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const customName = $('#renameInput').value.trim().slice(0, 40);
+  state.saved = state.saved.map((d) => {
+    if (!sameDevice(d, renaming)) return d;
+    const { customName: _old, ...rest } = d;
+    return customName ? { ...rest, customName } : rest;
+  });
+  persist();
+  $('#renameDialog').close();
+  renderLists();
+  render();
+});
+
 $('#removeConfirm').addEventListener('click', () => {
   if (removing) {
     state.saved = state.saved.filter((d) => !sameDevice(d, removing));
@@ -479,7 +597,7 @@ $('#manualForm').addEventListener('submit', (event) => {
   }
   $('#manualDialog').close();
   $('#devicesSheet').close();
-  connect({ type, host, name: `${typeLabel(type)} · ${host}` });
+  connect({ type, host, name: type === 'lg' ? 'LG-TV' : 'Roku' });
 });
 
 $('#textOpen').addEventListener('click', () => {
@@ -547,7 +665,7 @@ window.__fjernBack = () => {
 
 if (!native && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
-state.saved = storage.read('fjern-devices', []).filter(isValidDevice);
+state.saved = storage.read('fjern-devices', []).filter(isValidDevice).map((d) => ({ ...d, name: normalizeName(d) }));
 const lastSelected = storage.read('fjern-selected', null);
 const previous = state.saved.find((d) => `${d.type}:${d.host}` === lastSelected);
 render();

@@ -104,6 +104,29 @@ class BridgeLogicTest {
         dir.deleteRecursively()
     }
 
+    @Test fun `ikoner godtas bare som ekte bilder og med tak`() {
+        assertEquals("image/png", Icons.sniff(byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 13, 10, 26, 10, 0, 0, 0, 13)))
+        assertEquals("image/jpeg", Icons.sniff(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0, 16, 74, 70, 73, 70, 0, 1)))
+        assertEquals("image/webp", Icons.sniff("RIFF\u0000\u0000\u0000\u0000WEBPVP8 ".toByteArray(Charsets.ISO_8859_1)))
+        assertNull(Icons.sniff("<svg xmlns=\"http://www.w3.org/2000/svg\"><script/></svg>".toByteArray()))
+        assertNull(Icons.sniff("<html><body>x</body></html>".toByteArray()))
+        try {
+            Icons.readLimited(ByteArray(Icons.MAX_BYTES + 1).inputStream())
+            throw AssertionError("Forventet UserError")
+        } catch (_: UserError) {
+        }
+        val cache = Icons.Cache(max = 2)
+        cache.put("a", "image/png" to ByteArray(1)); cache.put("b", "image/png" to ByteArray(1)); cache.put("c", "image/png" to ByteArray(1))
+        assertNull(cache.get("a"))
+    }
+
+    @Test fun `Roku-innganger er system, standardnavn uten IP`() {
+        assertTrue(Roku.parseApps("""<app id="tvinput.hdmi1" type="tvin">HDMI 1</app>""")[0].system)
+        assertFalse(Roku.parseApps("""<app id="12" type="appl">Netflix</app>""")[0].system)
+        assertEquals("Roku", Roku.parseDeviceInfo("192.168.1.9", "<device-info/>").name)
+        assertEquals("LG-TV", Ssdp.classify("webos", "192.168.0.3")?.name)
+    }
+
     @Test fun `feilsøkingsloggen har tak`() {
         repeat(200) { Diagnostics.add("linje $it") }
         val lines = Diagnostics.snapshot()

@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -122,6 +123,7 @@ class LgSession(
     @Volatile var status: String = IDLE; private set
     @Volatile var code: String? = null; private set
     @Volatile var canWake = false; private set
+    @Volatile var model: String? = null; private set
 
     private var generation = 0
     private var control: Socket? = null
@@ -212,7 +214,7 @@ class LgSession(
         rejectPending(LOST)
         closeSocket(pointer)
         closeSocket(control)
-        host = null; control = null; pointer = null; ready = false; status = IDLE; code = null; canWake = false; apps = emptyList()
+        host = null; control = null; pointer = null; ready = false; status = IDLE; code = null; canWake = false; apps = emptyList(); model = null
     }
 
     suspend fun disconnect() = withContext(state) { resetLocked() }
@@ -316,7 +318,10 @@ class LgSession(
             ready = true
             status = READY
             log("LG: klar (navigasjon tilkoblet)")
-            if (retry) host?.let { rememberMac(it) }
+            if (retry) host?.let {
+                rememberMac(it)
+                rememberModel()
+            }
         } catch (e: Exception) {
             log("LG: pekersocket feilet (${e.message})")
             if (current(gen)) status = POINTER_LOST
@@ -493,7 +498,15 @@ class LgSession(
             val point = points.optJSONObject(i) ?: continue
             try {
                 val id = Validate.appId(point.optString("id"))
-                list += App(id, point.optString("title").ifEmpty { id }.take(80))
+                val color = point.optString("bgColor").takeIf { Regex("^#[0-9a-fA-F]{6}$").matches(it) }
+                list += App(
+                    id,
+                    point.optString("title").ifEmpty { id }.take(80),
+                    system = point.optBoolean("systemApp", false),
+                    color = color,
+                    // largeIcon er skarpere på telefoner med høy oppløsning.
+                    icon = point.optString("largeIcon").ifEmpty { point.optString("icon") }.ifEmpty { null },
+                )
             } catch (_: UserError) {
                 // hopp over ugyldige id-er
             }
@@ -501,6 +514,42 @@ class LgSession(
         }
         apps = list
         list
+    }
+
+    /** Modellnavnet brukes som TV-navn når brukeren ikke har valgt et eget. */
+    private suspend fun rememberModel() {
+        try {
+            val name = request("ssap://system/getSystemInfo")?.optString("modelName")?.trim()?.take(40)
+            if (!name.isNullOrEmpty()) model = "LG $name"
+        } catch (e: Exception) {
+            log("LG: fant ikke modellnavn (${e.message})")
+        }
+    }
+
+    /** Henter et appikon, men bare fra TV-en selv (http eller https med TV-ens egne sertifikat). */
+    suspend fun icon(id: String): ByteArray = withContext(state) {
+        val url = apps.firstOrNull { it.id == id }?.icon ?: throw UserError("Fant ikke ikonet.", 404)
+        val parsed = url.toHttpUrlOrNull() ?: throw UserError("Fant ikke ikonet.", 404)
+        if (parsed.host != host) throw UserError("Fant ikke ikonet.", 404)
+        withContext(Dispatchers.IO) {
+            try {
+                fetchIcon(parsed)
+            } catch (e: Exception) {
+                // TV-er som bare har kryptert port, serverer de samme ressursene på https://…:3001.
+                if (parsed.isHttps) throw e
+                fetchIcon(parsed.newBuilder().scheme("https").port(3001).build())
+            }
+        }
+    }
+
+    private fun fetchIcon(url: okhttp3.HttpUrl): ByteArray {
+        val client = if (url.isHttps) clientFor(null, AtomicReference(null)) else baseClient
+        return client.newBuilder().callTimeout(3, TimeUnit.SECONDS).build()
+            .newCall(Request.Builder().url(url).build()).execute().use { response ->
+                if (!response.isSuccessful) throw UserError("TV-en ga ikke ut ikonet.", 502)
+                val body = response.body ?: throw UserError("TV-en ga ikke ut ikonet.", 502)
+                Icons.readLimited(body.byteStream())
+            }
     }
 
     suspend fun launch(id: String) = withContext(state) {

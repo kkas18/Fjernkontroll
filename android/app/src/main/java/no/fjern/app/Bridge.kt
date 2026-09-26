@@ -28,8 +28,35 @@ class Bridge(
     private var rokuApps: List<App> = emptyList()
     private var scan: Deferred<List<Device>>? = null
 
-    private fun Device.toJson() = JSONObject().put("type", type).put("host", host).put("name", name)
-    private fun List<App>.toJson() = JSONArray().also { array -> forEach { array.put(JSONObject().put("id", it.id).put("name", it.name)) } }
+    private val icons = Icons.Cache()
+    private val defaultNames = Regex("^(LG-TV|LG webOS|Roku)( · .*)?$")
+
+    /** Standardnavn byttes ut med TV-ens modellnavn når det er kjent (brukerens egne navn settes i appen). */
+    private fun Device.toJson(): JSONObject {
+        val model = if (type == "lg") lg.model else null
+        val shown = if (model != null && defaultNames.matches(name)) model else name
+        return JSONObject().put("type", type).put("host", host).put("name", shown)
+    }
+    // Ikonadressen er intern: grensesnittet henter ikonet via /api/icon/<id>.
+    private fun List<App>.toJson() = JSONArray().also { array ->
+        forEach { array.put(JSONObject().put("id", it.id).put("name", it.name).put("system", it.system).put("color", it.color ?: JSONObject.NULL)) }
+    }
+
+    /** Ikon for en app på valgt TV, som (MIME-type, bytes). Brukes av WebView-ens /api/icon/-rute. */
+    suspend fun icon(rawId: String): Pair<String, ByteArray> {
+        val id = Validate.appId(rawId)
+        val device = lock.withLock { selected } ?: throw UserError("Velg en TV først.", 409)
+        val key = "${device.type}:${device.host}:$id"
+        icons.get(key)?.let { return it }
+        val bytes = if (device.type == "lg") {
+            lg.icon(id)
+        } else {
+            if (lock.withLock { rokuApps }.none { it.id == id }) throw UserError("Fant ikke ikonet.", 404)
+            withContext(Dispatchers.IO) { Roku.icon(device.host, id) }
+        }
+        val type = Icons.sniff(bytes) ?: throw UserError("Ikonet er ikke et bilde.", 415)
+        return (type to bytes).also { icons.put(key, it) }
+    }
 
     private suspend fun rokuReachable(device: Device): Boolean {
         val (host, ok, at) = rokuHealth

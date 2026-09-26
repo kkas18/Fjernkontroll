@@ -33,7 +33,9 @@
   --t-xl: 28px;
 
   --press: 120ms;
-  --bevel: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.4);
+  --bevel: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 1px 2px rgb(0 0 0 / 0.45);
+  /* Knapper med ikon eller tekst trenger ikke 3:1-kant (WCAG 1.4.11); de får en svak kant i stedet. */
+  --edge: rgb(255 255 255 / 0.06);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -104,7 +106,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   place-items: center;
   border-radius: var(--r-full);
   background: var(--raised);
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   box-shadow: var(--bevel);
   transition-property: transform, background-color;
   transition-duration: var(--press);
@@ -133,26 +135,71 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .remote { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-3), 3dvh, var(--s-6)); padding-top: var(--s-3); }
 .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
 .row.transport { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
+/* Avspilling er sekundært: lavere og roligere enn tastene over. */
+.row.transport .key { min-height: 48px; background: var(--surface); box-shadow: none; }
 
-/* Apper fra TV-en fyller den ledige plassen over kontrollene og ruller ved behov */
-.apps { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: var(--s-2); }
+/* Favoritter står fast rett over kontrollene, med ekte ikoner fra TV-en */
+.apps { flex: 0 0 auto; margin-top: auto; display: flex; flex-direction: column; gap: var(--s-2); }
 .apps-title { font-size: var(--t-s); font-weight: 600; color: var(--muted); }
-.app-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); overflow-y: auto; min-height: 0; }
-.app-tile {
-  min-height: 48px;
-  padding: 0 var(--s-2);
-  border-radius: var(--r-m);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  font-size: var(--t-s);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition-property: transform, background-color;
+.fav-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-3) var(--s-2); }
+.fav {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  transition-property: transform;
   transition-duration: var(--press);
 }
-.app-tile:active { transform: scale(0.96); background: var(--raised-hi); }
+.fav:active { transform: scale(0.94); }
+.fav-label { max-width: 100%; font-size: var(--t-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.app-icon {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--r-m);
+  background: var(--app-color, var(--raised));
+  color: #fff;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+.app-icon.m { width: 52px; height: 52px; font-size: var(--t-s); }
+.app-icon.s { width: 40px; height: 40px; border-radius: 10px; font-size: var(--t-xs); }
+.app-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.app-icon.has-image { color: transparent; }
+.app-icon.all { background: var(--raised); color: var(--muted); }
+.fav.is-sent .app-icon { box-shadow: inset 0 0 0 2px var(--ok); }
+.fav.is-failed .app-icon { box-shadow: inset 0 0 0 2px var(--err); }
+
+/* «Alle apper»: liste med stjerne for favoritter */
+.app-list { list-style: none; margin: var(--s-3) 0 0; padding: 0; display: grid; gap: var(--s-1); }
+.app-row { display: flex; align-items: center; gap: var(--s-2); }
+.app-open {
+  flex: 1;
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2);
+  border: 0;
+  border-radius: var(--r-m);
+  background: none;
+  text-align: left;
+  font-weight: 600;
+}
+.app-open span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-open:active { background: var(--raised); }
+.app-star { width: 48px; height: 48px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; color: var(--muted); }
+.app-star[aria-pressed="true"] { color: var(--accent); }
+.app-star[aria-pressed="true"] use { fill: currentColor; }
 
 .key, .rocker button, .dir, .ok {
   transition-property: transform, background-color, box-shadow, color;
@@ -168,7 +215,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   gap: 2px;
   border-radius: var(--r-m);
   background: var(--raised);
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   box-shadow: var(--bevel);
   font-size: var(--t-xs);
   color: var(--muted);
@@ -176,7 +223,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .key .icon { color: var(--text); }
 .key:active { transform: scale(0.96); background: var(--raised-hi); }
 
-.cluster { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; gap: var(--s-3); }
+.cluster { display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; gap: var(--s-2); }
 
 .rocker {
   height: 100%;
@@ -185,7 +232,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   grid-template-rows: 1fr auto 1fr;
   border-radius: var(--r-full);
   background: var(--raised);
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   box-shadow: var(--bevel);
   overflow: hidden;
 }
@@ -202,7 +249,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   justify-self: center;
   border-radius: var(--r-full);
   background: var(--raised);
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   box-shadow: var(--bevel);
   overflow: hidden;
 }

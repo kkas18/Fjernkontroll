@@ -50,4 +50,11 @@ object Validate {
 
 data class Device(val type: String, val host: String, val name: String, val isTv: Boolean? = null)
 
-data class App(val id: String, val name: String)
+data class App(
+    val id: String,
+    val name: String,
+    val system: Boolean = false,
+    val color: String? = null,
+    /** Intern adresse til ikonet på TV-en; sendes aldri til grensesnittet. */
+    val icon: String? = null,
+)

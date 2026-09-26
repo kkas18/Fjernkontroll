@@ -2,6 +2,8 @@
 
 **Dato:** 2026-09-26 · **Revidert versjon:** 2.2.1 (APK) på brukerens LG webOS-TV
 **Utløser:** Appen virker nå mot TV-en, men brukeren savner ikoner på appsnarveiene og må koble til på nytt etter å ha vært ute av appen.
+> **Status:** Fase A–D er gjennomført i versjon 2.3.0. Se **[Etter utbedring](#etter-utbedring-v230)**: designskår **69 → 83 / 100**.
+
 **Tidligere revisjoner:** [runde 2](docs/revisjon/REVISJON-v2.md) (79 → 87) · [runde 1](docs/revisjon/REVISJON-v1.md) (47 → 83)
 
 ## Metode
@@ -97,3 +99,55 @@ Ingen av de ti opprinnelige mønstrene er tilbake. Det eneste nye er tekstbrikke
 | B | Favoritter over kontrollene, «Alle apper»-ark, hold inne for å endre favoritter, systemapper nederst | D2, D7, D8, D9 | ~83 |
 | C | Ekte TV-navn og mulighet til å endre det | D4 | ~85 |
 | D | Roligere flater uten tunge kanter, større styreknapp, kompakt transportrad | D5, D6, D10 | ~89 |
+
+---
+
+## Etter utbedring (v2.3.0)
+
+### Designskår: **83 / 100** (før: 69)
+
+| Dimensjon | Før | Etter | Hva ble gjort |
+| --- | --- | --- | --- |
+| Fargekonsistens | 8 | 9 | Appikonene har egne farger. Resten av grensesnittet er rolig grafitt. |
+| Typografisk hierarki | 6 | 8 | Ekte TV-navn (f.eks. «LG OLED55C14LB»), IP-adressen på egen linje, appnavn i 12 px under ikonet. |
+| Avstandsrytme | 6 | 7 | Favorittene står fast over kontrollene. Det gjenstår et tomt felt øverst på høye telefoner. |
+| Komponentkonsistens | 7 | 9 | Favoritter, taster og avspilling har hver sin form og vekt. |
+| Responsivitet | 6 | 8 | Styreknappen er 200 px på 360 px bredde (før 176) og vokser på større telefoner. |
+| Mørk modus | 8 | 8 | Uendret. |
+| Animasjon | 8 | 8 | Uendret. |
+| Tilgjengelighet | 8 | 8,5 | Stjerneknappene har `aria-pressed` og tydelige navn. Knappene har ikon eller tekst, så de trenger ikke kant med 3:1-kontrast (WCAG 1.4.11). |
+| Informasjonstetthet | 5 | 9 | Fire favoritter og «Alle apper» i stedet for 15 like fliser. Systemapper står under «Annet». |
+| Polish | 6 | 8,5 | Ekte ikoner fra TV-en, fargede forbokstaver som reserve, og du kan gi TV-en eget navn. |
+| **Snitt** | **6,9** | **8,3** | |
+
+### Funnstatus
+
+| Funn | Status |
+| --- | --- |
+| D1 Ingen ikoner | ✅ Broen henter ikonet fra TV-en (LG `largeIcon`/`icon`, med https på port 3001 som reserve, og Roku `/query/icon`). Ikonet godtas bare hvis innholdet er PNG, JPEG, GIF eller WebP, maks 256 KB, og mellomlagres. For LG hentes det bare fra TV-ens egen adresse. |
+| D2 For mange apper | ✅ Favoritter velges automatisk fra kjente strømmeapper og kan endres med stjerne i «Alle apper». Systemapper og innganger står under «Annet». |
+| D3 Forbindelse i bakgrunnen | ✅ Rettet i 2.2.2. Brukeren har bekreftet at det virker. |
+| D4 Dobbelt TV-navn | ✅ Modellnavn fra TV-en (`system/getSystemInfo`), eget navn under TV-er → blyant. Gamle navn som «LG webOS · 192.168.0.3» ryddes automatisk. |
+| D5 Tunge kanter | ✅ Fylte knapper har svak kant. Kanten med 3:1-kontrast er beholdt på skjemafelt og valg. |
+| D6 Liten styreknapp | ✅ Vippebryterne er 56 px brede, og mellomrommet er mindre. |
+| D7 Ujevn rytme | ✅ Favorittene står fast over kontrollene. |
+| D8–D10 | ✅ «Favoritter» og «Alle apper», 12 px appnavn, lavere og roligere avspillingsrad. |
+
+### Verifisering
+
+- `npm run verify`: 66/66 tester.
+  - Ikonrute: ekte bilde godtas, SVG og HTML avvises, tak på størrelse, ukjente apper og ugyldige id-er avvises.
+  - Favoritter testet med brukerens egen appliste.
+  - Modellnavn erstatter standardnavn, men ikke brukerens eget.
+- `./gradlew testDebugUnitTest assembleRelease`: 13/13, APK 2.3.0.
+- Chromium med brukerens appliste og testikoner: favoritter, «Alle apper», stjerner, nytt navn og migrering av navn virker. Ingen konsollfeil, og ingen rulling på 360×800.
+
+### Gjenstår
+
+1. **Ekte LG-ikoner er ikke sett på TV-en ennå.** Adressen og porten til ikonene varierer mellom webOS-versjoner. Mangler et ikon, vises fargede forbokstaver, og feilsøkingsloggen viser årsaken.
+2. Det tomme feltet øverst på høye telefoner er bevisst, siden tommelen ikke når dit. Det kan brukes til noe senere, for eksempel «Nå spilles».
+
+| LG med ikoner | Alle apper | 360×800 |
+| --- | --- | --- |
+| ![](docs/revisjon/runde3/05-etter-412x915.png) | ![](docs/revisjon/runde3/06-alle-apper.png) | ![](docs/revisjon/runde3/07-etter-360x800.png) |
+

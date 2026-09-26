@@ -38,7 +38,12 @@ function fakeTv({ failSecure = false, failAll = false, approve = true, muted = f
       else if (uri.endsWith('getPointerInputSocket')) reply({ type: 'response', id: message.id, payload: { socketPath: `ws://${HOST}:3000/pointer` } });
       else if (uri.endsWith('getStatus')) reply({ type: 'response', id: message.id, payload: { mute: muted } });
       else if (uri.endsWith('connectionmanager/getinfo')) reply({ type: 'response', id: message.id, payload: { wifiInfo: { macAddress: 'A8-23-FE-01-02-03' } } });
-      else if (uri.endsWith('listLaunchPoints')) reply({ type: 'response', id: message.id, payload: { launchPoints: [{ id: 'netflix', title: 'Netflix' }, { id: 'bad id!', title: 'Ugyldig' }] } });
+      else if (uri.endsWith('listLaunchPoints')) reply({ type: 'response', id: message.id, payload: { launchPoints: [
+        { id: 'netflix', title: 'Netflix', bgColor: '#E50914', icon: `http://${HOST}:3000/resources/netflix.png` },
+        { id: 'com.palmdts.devmode', title: 'Developer Mode', systemApp: true, icon: 'http://evil.example/x.png' },
+        { id: 'bad id!', title: 'Ugyldig' },
+      ] } });
+      else if (uri.endsWith('getSystemInfo')) reply({ type: 'response', id: message.id, payload: { modelName: 'OLED55C14LB' } });
       else if (uri.endsWith('channelUp')) reply({ type: 'error', id: message.id, error: '401 insufficient permissions' });
       else reply({ type: 'response', id: message.id, payload: { returnValue: true } });
     }
@@ -176,7 +181,14 @@ test('kommandoer før tilkobling avvises med tilstanden', async () => {
 
 test('apper: bare gyldige id-er, og bare kjente apper kan startes', async () => {
   const { tv, lg } = await readySession();
-  assert.deepEqual(await lg.apps(), [{ id: 'netflix', name: 'Netflix' }]);
+  assert.deepEqual(await lg.apps(), [
+    { id: 'netflix', name: 'Netflix', system: false, color: '#E50914' },
+    { id: 'com.palmdts.devmode', name: 'Developer Mode', system: true, color: null },
+  ]);
+  assert.equal(lg.iconUrl('netflix'), `http://${HOST}:3000/resources/netflix.png`);
+  assert.equal(lg.iconUrl('com.palmdts.devmode'), null, 'ikoner fra andre verter avvises');
+  assert.equal(lg.iconUrl('finnes-ikke'), null);
+  assert.equal(lg.model, 'LG OLED55C14LB', 'modellnavnet hentes fra TV-en');
   await lg.launch('netflix');
   assert.deepEqual(JSON.parse(tv.sent.control.at(-1)).payload, { id: 'netflix' });
   await assert.rejects(lg.launch('com.webos.app.hack'), UserError);

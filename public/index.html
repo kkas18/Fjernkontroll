@@ -39,6 +39,9 @@
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
     <symbol id="i-playpause" viewBox="0 0 24 24"><path d="M4 6v12l8-6-8-6Z" fill="currentColor"/><path d="M15.5 6.5v11M19.5 6.5v11"/></symbol>
     <symbol id="i-delete" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-6-7 6-7Z"/><path d="m12 9.5 5 5m0-5-5 5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></symbol>
   </svg>
 
@@ -63,8 +66,8 @@
 
     <main id="remote" class="remote" aria-label="Fjernkontroll" hidden>
       <section id="apps" class="apps" aria-labelledby="appsTitle" hidden>
-        <h2 id="appsTitle" class="apps-title">Apper</h2>
-        <div id="appGrid" class="app-grid"></div>
+        <h2 id="appsTitle" class="apps-title">Favoritter</h2>
+        <div id="appGrid" class="fav-grid"></div>
       </section>
 
       <div class="row">
@@ -185,6 +188,30 @@
       <button id="powerOn" type="button" class="button">Slå på</button>
       <button id="powerOff" type="button" class="button danger">Slå av</button>
     </div>
+  </dialog>
+
+  <dialog id="appsSheet" class="sheet" aria-labelledby="appsSheetTitle">
+    <div class="sheet-head">
+      <h2 id="appsSheetTitle">Alle apper</h2>
+      <button class="icon-button" type="button" data-close="appsSheet" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="hint">Trykk på en app for å åpne den. Trykk på stjernen for å legge den til eller fjerne den fra favorittene.</p>
+    <ul id="allApps" class="app-list"></ul>
+    <h3 id="systemAppsTitle" class="list-title">Annet</h3>
+    <ul id="systemApps" class="app-list"></ul>
+  </dialog>
+
+  <dialog id="renameDialog" class="sheet" aria-labelledby="renameTitle">
+    <form id="renameForm" method="dialog" novalidate>
+      <div class="sheet-head">
+        <h2 id="renameTitle">Gi TV-en navn</h2>
+        <button class="icon-button" type="button" data-close="renameDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <label class="field-label" for="renameInput">Navn</label>
+      <input id="renameInput" class="field" maxlength="40" autocomplete="off" placeholder="For eksempel Stue">
+      <p class="hint">La feltet stå tomt for å bruke navnet fra TV-en.</p>
+      <button type="submit" class="button primary">Lagre</button>
+    </form>
   </dialog>
 
   <dialog id="diagDialog" class="sheet" aria-labelledby="diagTitle">

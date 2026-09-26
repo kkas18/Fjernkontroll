@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { UserError, toUserMessage } from './lib/errors.mjs';
 import { validAppId, validCommand, validDevice, validText } from './lib/validate.mjs';
-import { rokuApps, rokuCommand, rokuLaunch, rokuProbe, rokuText } from './lib/roku.mjs';
+import { rokuApps, rokuCommand, rokuIcon, rokuLaunch, rokuProbe, rokuText } from './lib/roku.mjs';
+import { createIconCache, fetchBytes, sniffImage } from './lib/icons.mjs';
 import { createDiscovery } from './lib/ssdp.mjs';
 import { createKeyStore, createLgSession } from './lib/lg.mjs';
 
@@ -84,9 +85,47 @@ export function createBridge({
   let selected = null;
   let rokuHealth = { host: null, ok: false, at: 0 };
   let rokuAppList = [];
+  const icons = createIconCache();
   keyStore.protect?.();
 
-  const publicDevice = (device) => device && { type: device.type, host: device.host, name: device.name };
+  // Standardnavn byttes ut med TV-ens modellnavn når det er kjent (brukerens egne navn settes i appen).
+  const DEFAULT_NAMES = /^(LG-TV|LG webOS|Roku)( · .*)?$/;
+  const publicDevice = (device) => {
+    if (!device) return device;
+    const model = device.type === 'lg' && lg.model;
+    const name = model && DEFAULT_NAMES.test(device.name) ? model : device.name;
+    return { type: device.type, host: device.host, name };
+  };
+
+  async function icon(id) {
+    if (!selected) throw new UserError('Velg en TV først.', 409);
+    const key = `${selected.type}:${selected.host}:${id}`;
+    const cached = icons.get(key);
+    if (cached) return cached;
+    let bytes;
+    if (selected.type === 'lg') {
+      const url = lg.iconUrl(id);
+      if (!url) throw new UserError('Fant ikke ikonet.', 404);
+      try {
+        bytes = await fetchBytes(url, { insecureTls: true });
+      } catch (error) {
+        // TV-er som bare har kryptert port, serverer de samme ressursene på https://…:3001.
+        const secure = new URL(url);
+        if (secure.protocol !== 'http:') throw error;
+        secure.protocol = 'https:';
+        secure.port = '3001';
+        bytes = await fetchBytes(secure.href, { insecureTls: true });
+      }
+    } else {
+      if (!rokuAppList.some((app) => app.id === id)) throw new UserError('Fant ikke ikonet.', 404);
+      bytes = await rokuIcon(selected.host, id, { fetchImpl });
+    }
+    const type = sniffImage(bytes);
+    if (!type) throw new UserError('Ikonet er ikke et bilde.', 415);
+    const result = { type, bytes };
+    icons.set(key, result);
+    return result;
+  }
 
   // Roku har ingen varig forbindelse, så vi spør TV-en jevnlig (bufret) om den svarer.
   async function rokuReachable() {
@@ -137,6 +176,14 @@ export function createBridge({
   }
 
   async function api(req, res, route) {
+    if (route.startsWith('/api/icon/')) {
+      if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
+      let id;
+      try { id = validAppId(decodeURIComponent(route.slice('/api/icon/'.length))); } catch { throw new UserError('Ukjent app.', 400); }
+      const { type, bytes } = await icon(id);
+      res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': type, 'content-length': bytes.length, 'cache-control': 'private, max-age=86400' });
+      return res.end(bytes);
+    }
     if (route === '/api/status' || route === '/api/apps' || route === '/api/diagnostics') {
       if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
       if (route === '/api/status') return sendJson(res, 200, await status());

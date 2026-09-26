@@ -17,8 +17,8 @@ class Ssdp(private val wifi: WifiManager?) {
             if (!Validate.isPrivateIPv4(host)) return null
             val text = message.lowercase()
             return when {
-                "roku" in text -> Device("roku", host, "Roku · $host")
-                "webos" in text || "lge-com" in text -> Device("lg", host, "LG webOS · $host")
+                "roku" in text -> Device("roku", host, "Roku")
+                "webos" in text || "lge-com" in text -> Device("lg", host, "LG-TV")
                 else -> null
             }
         }

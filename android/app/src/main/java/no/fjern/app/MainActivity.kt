@@ -2,6 +2,7 @@ package no.fjern.app
 
 import android.annotation.SuppressLint
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -24,6 +25,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import java.io.ByteArrayInputStream
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -81,6 +84,7 @@ class MainActivity : ComponentActivity() {
 
         val assets = WebViewAssetLoader.Builder()
             .setDomain(HOST)
+            .addPathHandler("/api/icon/", IconHandler(bridge))
             .addPathHandler("/", SecureAssetHandler(WebViewAssetLoader.AssetsPathHandler(this)))
             .build()
 
@@ -152,6 +156,19 @@ class MainActivity : ComponentActivity() {
             val response = inner.handle("www/" + path.ifEmpty { "index.html" }) ?: return null
             response.responseHeaders = (response.responseHeaders ?: emptyMap()) + SECURITY_HEADERS
             return response
+        }
+    }
+
+    /** Appikoner fra TV-en, levert fra appens egen opprinnelse (CSP: img-src 'self'). */
+    private class IconHandler(private val bridge: Bridge) : WebViewAssetLoader.PathHandler {
+        override fun handle(path: String): WebResourceResponse {
+            // shouldInterceptRequest kjører på en bakgrunnstråd, så det er trygt å vente her.
+            return try {
+                val (type, bytes) = runBlocking { bridge.icon(Uri.decode(path)) }
+                WebResourceResponse(type, null, 200, "OK", SECURITY_HEADERS + ("Cache-Control" to "private, max-age=86400"), ByteArrayInputStream(bytes))
+            } catch (e: Exception) {
+                WebResourceResponse("text/plain", "utf-8", 404, "Not Found", SECURITY_HEADERS, ByteArrayInputStream(ByteArray(0)))
+            }
         }
     }
 
