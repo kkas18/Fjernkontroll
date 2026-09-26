@@ -37,6 +37,8 @@
     <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 6v12M15.5 6v12"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-playpause" viewBox="0 0 24 24"><path d="M4 6v12l8-6-8-6Z" fill="currentColor"/><path d="M15.5 6.5v11M19.5 6.5v11"/></symbol>
+    <symbol id="i-delete" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-6-7 6-7Z"/><path d="m12 9.5 5 5m0-5-5 5"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></symbol>
   </svg>
 
@@ -49,13 +51,22 @@
       </button>
       <div class="bar-actions">
         <button id="textOpen" class="icon-button" type="button" aria-label="Send tekst til TV-en"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
-        <button id="powerOpen" class="icon-button" type="button" aria-label="Slå av TV-en"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg></button>
+        <button id="powerOpen" class="icon-button" type="button" aria-label="Strøm"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg></button>
       </div>
     </header>
 
-    <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+    <div id="notice" class="notice" hidden>
+      <p id="noticeText"></p>
+      <button id="noticeAction" class="button small" type="button" hidden></button>
+    </div>
+    <div id="announce" class="sr-only" role="status" aria-live="polite"></div>
 
     <main id="remote" class="remote" aria-label="Fjernkontroll" hidden>
+      <section id="apps" class="apps" aria-labelledby="appsTitle" hidden>
+        <h2 id="appsTitle" class="apps-title">Apper</h2>
+        <div id="appGrid" class="app-grid"></div>
+      </section>
+
       <div class="row">
         <button class="key" type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
         <button class="key" type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
@@ -77,17 +88,18 @@
           <button class="ok" type="button" data-key="Select">OK</button>
         </div>
 
-        <div class="rocker" role="group" aria-label="Kanal">
+        <div id="channelRocker" class="rocker" role="group" aria-label="Kanal">
           <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
-          <span class="rocker-label" aria-hidden="true">Kan</span>
+          <span class="rocker-label" aria-hidden="true">Kanal</span>
           <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
         </div>
       </div>
 
       <div class="row transport" role="group" aria-label="Avspilling">
         <button class="key" type="button" data-key="Rewind" aria-label="Spol tilbake"><svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg></button>
-        <button class="key" type="button" data-key="Play" aria-label="Spill av"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg></button>
-        <button class="key" type="button" data-key="Pause" aria-label="Pause"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg></button>
+        <button class="key" type="button" data-key="Play" data-transport="separate" aria-label="Spill av"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button class="key" type="button" data-key="Pause" data-transport="separate" aria-label="Pause"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg></button>
+        <button class="key" type="button" data-key="Play" data-transport="toggle" aria-label="Spill av eller pause" hidden><svg class="icon" aria-hidden="true"><use href="#i-playpause"/></svg></button>
         <button class="key" type="button" data-key="FastForward" aria-label="Spol fram"><svg class="icon" aria-hidden="true"><use href="#i-forward"/></svg></button>
       </div>
     </main>
@@ -119,7 +131,7 @@
       <summary>Slik kobler du til</summary>
       <ol>
         <li>Telefon og TV må være på samme Wi‑Fi. Gjestenett blokkerer ofte tilkoblingen.</li>
-        <li>Broen må kjøre i Termux: <code>node server.mjs</code>. Appen åpnes på <code>localhost:8765</code>.</li>
+        <li>Broen må kjøre i Termux: <code>npm start</code>. Appen åpnes på <code>localhost:8765</code>.</li>
         <li>Roku: slå på <i>Settings → System → Advanced system settings → Control by mobile apps</i>.</li>
         <li>LG webOS: godkjenn forespørselen som vises på TV-en første gang.</li>
       </ol>
@@ -154,18 +166,33 @@
       <label class="field-label" for="tvText">Tekst</label>
       <input id="tvText" class="field" maxlength="140" autocomplete="off" enterkeyhint="send" aria-describedby="textHint" required>
       <p id="textHint" class="hint">Marker et tekstfelt på TV-en først.</p>
-      <button type="submit" class="button primary">Send</button>
+      <div class="stack two">
+        <button id="textBackspace" type="button" class="button"><svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg>Slett tegn</button>
+        <button type="submit" class="button primary">Send</button>
+      </div>
     </form>
   </dialog>
 
   <dialog id="powerDialog" class="sheet" aria-labelledby="powerTitle">
     <div class="sheet-head">
-      <h2 id="powerTitle">Slå av TV-en?</h2>
+      <h2 id="powerTitle">Strøm</h2>
+      <button class="icon-button" type="button" data-close="powerDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
-    <p class="hint">Den kan ikke alltid slås på igjen via nettverket. Da må du bruke den vanlige fjernkontrollen.</p>
+    <p id="powerHint" class="hint"></p>
     <div class="stack two">
-      <button type="button" class="button" data-close="powerDialog">Avbryt</button>
-      <button id="powerConfirm" type="button" class="button danger">Slå av</button>
+      <button id="powerOn" type="button" class="button">Slå på</button>
+      <button id="powerOff" type="button" class="button danger">Slå av</button>
+    </div>
+  </dialog>
+
+  <dialog id="removeDialog" class="sheet" aria-labelledby="removeTitle">
+    <div class="sheet-head">
+      <h2 id="removeTitle">Fjerne TV-en?</h2>
+    </div>
+    <p id="removeText" class="hint"></p>
+    <div class="stack two">
+      <button type="button" class="button" data-close="removeDialog">Avbryt</button>
+      <button id="removeConfirm" type="button" class="button danger">Fjern</button>
     </div>
   </dialog>
 

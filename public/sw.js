@@ -1,10 +1,11 @@
 // Nettverk først, med hurtigbuffer som reserve når broen ikke svarer.
-// Øk versjonen ved hver endring av filene under.
-const CACHE = 'fjern-v2';
+// Versjonen må være lik "version" i package.json (sjekkes av testene).
+const CACHE = 'fjern-2.1.0';
 const ASSETS = [
   '/',
   '/style.css',
   '/app.js',
+  '/logic.js',
   '/manifest.webmanifest',
   '/icons/icon.svg',
   '/icons/icon-32.png',

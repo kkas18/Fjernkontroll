@@ -1,4 +1,8 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
+import {
+  BRIDGE_DOWN, isPrivateIPv4, isValidDevice, newDevices, noticeFor, rememberDevice, sameDevice, transportMode, typeLabel,
+} from './logic.js';
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -13,8 +17,13 @@ const state = {
   ready: false,
   bridge: true,
   message: '',
+  code: null,
+  capabilities: null,
+  apps: [],
+  appsFor: null,
   scanning: false,
   connecting: 0,
+  announcedReady: null,
 };
 
 // Lagring kan være blokkert (privat modus, full lagring). Appen skal virke likevel.
@@ -27,24 +36,13 @@ const storage = {
   },
 };
 
-const sameDevice = (a, b) => Boolean(a && b && a.type === b.type && a.host === b.host);
-const isValidDevice = (d) => d && ['roku', 'lg'].includes(d.type) && typeof d.host === 'string';
-const typeLabel = (type) => (type === 'lg' ? 'LG webOS' : 'Roku');
-
-function isPrivateIPv4(ip) {
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return false;
-  const [a, b, ...rest] = ip.split('.').map(Number);
-  if (![a, b, ...rest].every((n) => n <= 255)) return false;
-  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-}
-
 function persist() {
   storage.write('fjern-devices', state.saved);
   if (state.device) storage.write('fjern-selected', `${state.device.type}:${state.device.host}`);
 }
 
 function remember(device) {
-  state.saved = [device, ...state.saved.filter((d) => !sameDevice(d, device))];
+  state.saved = rememberDevice(state.saved, device);
   persist();
 }
 
@@ -60,7 +58,7 @@ async function api(route, body) {
     });
   } catch {
     state.bridge = false;
-    throw new Error('Broen svarer ikke. Start den i Termux med «node server.mjs».');
+    throw new Error(BRIDGE_DOWN);
   }
   state.bridge = true;
   const data = await response.json().catch(() => ({}));
@@ -68,7 +66,25 @@ async function api(route, body) {
   return data;
 }
 
+function applyStatus(status) {
+  state.device = status.device || state.device;
+  state.ready = Boolean(status.ready);
+  state.message = status.state || '';
+  state.code = status.code || null;
+  state.capabilities = status.capabilities || null;
+}
+
 // ---------- Visning ----------
+
+function svgIcon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
 
 let toastTimer;
 function toast(message) {
@@ -79,48 +95,61 @@ function toast(message) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
 }
 
-function haptic(ms = 10) {
-  navigator.vibrate?.(ms);
+function haptic(pattern = 10) {
+  navigator.vibrate?.(pattern);
+}
+
+// Skjermlesere får beskjed når TV-en blir klar, siden statuslinjen da skjules.
+function announce() {
+  const key = state.ready && state.device ? `${state.device.type}:${state.device.host}` : null;
+  if (key === state.announcedReady) return;
+  state.announcedReady = key;
+  if (key) $('#announce').textContent = `Tilkoblet ${state.device.name}.`;
 }
 
 function render() {
-  const { device, ready, bridge } = state;
+  const { device, ready, bridge, capabilities } = state;
   $('#deviceName').textContent = device?.name || 'Ingen TV';
   $('#deviceMeta').hidden = !device;
   $('#deviceMeta').textContent = device ? `${typeLabel(device.type)} · ${device.host}` : '';
   $('#deviceButton').setAttribute('aria-label', device ? `${device.name}. Bytt TV` : 'Velg TV');
+  $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code ? 'err' : 'busy') : 'off';
 
-  const led = !bridge ? 'err' : ready ? 'ok' : device ? 'busy' : 'off';
-  $('#led').dataset.state = led;
-
-  const notice = $('#notice');
-  let text = '';
-  let tone = 'info';
-  if (!bridge) {
-    text = 'Broen svarer ikke. Start den i Termux med «node server.mjs».';
-    tone = 'err';
-  } else if (device && !ready) {
-    text = state.message || 'Kobler til …';
-    tone = /ikke|feil|avvist|frakoblet|kontakt/i.test(text) ? 'err' : 'busy';
-  }
-  notice.hidden = !text;
-  notice.textContent = text;
-  notice.dataset.tone = tone;
+  const notice = noticeFor(state);
+  $('#notice').hidden = !notice.text;
+  $('#notice').dataset.tone = notice.tone;
+  $('#noticeText').textContent = notice.text;
+  $('#noticeAction').hidden = !notice.action;
+  $('#noticeAction').textContent = notice.action?.label || '';
+  $('#noticeAction').dataset.action = notice.action?.id || '';
 
   $('#remote').hidden = !device;
   $('#empty').hidden = Boolean(device);
   $('#powerOpen').disabled = !device;
   $('#textOpen').disabled = !device;
+
+  const mode = transportMode(capabilities);
+  $$('[data-transport]').forEach((el) => { el.hidden = el.dataset.transport !== mode; });
+  $('#channelRocker').classList.toggle('is-unused', capabilities?.channels === false);
+
+  renderApps();
+  announce();
 }
 
-function icon(name) {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'icon');
-  svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-  use.setAttribute('href', `#i-${name}`);
-  svg.append(use);
-  return svg;
+function renderApps() {
+  const visible = state.ready && state.apps.length > 0;
+  $('#apps').hidden = !visible;
+  if (!visible) return;
+  const tiles = state.apps.map((app) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'app-tile';
+    button.textContent = app.name;
+    button.title = app.name;
+    button.addEventListener('click', () => launch(app, button));
+    return button;
+  });
+  $('#appGrid').replaceChildren(...tiles);
 }
 
 function deviceItem(device, { stored }) {
@@ -148,13 +177,8 @@ function deviceItem(device, { stored }) {
     remove.type = 'button';
     remove.className = 'device-remove';
     remove.setAttribute('aria-label', `Fjern ${device.name}`);
-    remove.append(icon('trash'));
-    remove.addEventListener('click', () => {
-      if (!confirm(`Fjerne ${device.name} fra listen?`)) return;
-      state.saved = state.saved.filter((d) => !sameDevice(d, device));
-      persist();
-      renderLists();
-    });
+    remove.append(svgIcon('trash'));
+    remove.addEventListener('click', () => askRemove(device));
     li.append(remove);
   }
   return li;
@@ -171,8 +195,7 @@ function renderLists() {
   const saved = state.saved.map((d) => deviceItem(d, { stored: true }));
   $('#savedList').replaceChildren(...(saved.length ? saved : [emptyItem('Ingen lagrede TV-er ennå.')]));
 
-  const fresh = state.found.filter((d) => !state.saved.some((s) => sameDevice(s, d)));
-  const found = fresh.map((d) => deviceItem(d, { stored: false }));
+  const found = newDevices(state.found, state.saved).map((d) => deviceItem(d, { stored: false }));
   const emptyText = state.scanning ? 'Søker …' : 'Ingen nye TV-er. Trykk Søk, eller legg til med IP.';
   $('#foundList').replaceChildren(...(found.length ? found : [emptyItem(emptyText)]));
 
@@ -182,19 +205,33 @@ function renderLists() {
 
 // ---------- Handlinger ----------
 
-async function connect(device, { userInitiated = true } = {}) {
+async function loadApps() {
+  const key = state.device && `${state.device.type}:${state.device.host}`;
+  if (!state.ready || !key || state.appsFor === key) return;
+  state.appsFor = key;
+  try {
+    const { apps } = await api('apps');
+    if (state.appsFor === key) state.apps = apps || [];
+  } catch {
+    state.apps = [];
+  }
+  render();
+}
+
+async function connect(device, { userInitiated = true, route = 'connect' } = {}) {
   if (userInitiated) haptic();
   const attempt = ++state.connecting;
   state.device = device;
   state.ready = false;
+  state.code = null;
+  state.apps = [];
+  state.appsFor = null;
   state.message = `Kobler til ${device.name} …`;
   render();
   try {
-    const answer = await api('connect', { device });
+    const answer = await api(route, route === 'connect' ? { device } : {});
     if (attempt !== state.connecting) return;
-    state.device = answer.device || device;
-    state.ready = answer.ready;
-    state.message = answer.state;
+    applyStatus(answer);
     persist();
     if (state.ready) remember(state.device);
   } catch (error) {
@@ -204,6 +241,7 @@ async function connect(device, { userInitiated = true } = {}) {
   } finally {
     if (attempt === state.connecting) state.connecting = 0;
     render();
+    loadApps();
   }
 }
 
@@ -213,19 +251,19 @@ async function refreshStatus() {
     const status = await api('status');
     if (state.connecting) return;
     if (status.device) {
-      state.device = status.device;
-      state.ready = status.ready;
-      state.message = status.state;
+      applyStatus(status);
       if (status.ready && !state.saved.some((d) => sameDevice(d, status.device))) remember(status.device);
     } else if (state.device) {
-      // Broen er startet på nytt og har glemt TV-en. Behold valget og be brukeren koble til igjen.
+      // Broen er startet på nytt og har glemt TV-en. Behold valget og tilby ny tilkobling.
       state.ready = false;
-      state.message = 'Broen er startet på nytt. Velg TV-en for å koble til igjen.';
+      state.code = 'unreachable';
+      state.message = 'Broen er startet på nytt.';
     }
   } catch {
     state.ready = false;
   }
   render();
+  loadApps();
 }
 
 function flash(button, className, ms) {
@@ -236,25 +274,38 @@ function flash(button, className, ms) {
 }
 
 const inFlight = new Set();
-async function send(key, button) {
-  if (!state.device) return;
-  if (!state.ready) {
+async function send(key, button, { requireReady = true } = {}) {
+  if (!state.device) return false;
+  if (requireReady && !state.ready) {
     toast(state.message || 'TV-en er ikke tilkoblet ennå.');
     flash(button, 'is-failed', 600);
-    return;
+    return false;
   }
-  if (inFlight.has(key)) return; // unngå kø når en knapp holdes inne
+  if (inFlight.has(key)) return false; // unngå kø når en knapp holdes inne
   inFlight.add(key);
   try {
     await api('command', { key });
     flash(button, 'is-sent', 160);
+    return true;
   } catch (error) {
     haptic([20, 40, 20]);
     flash(button, 'is-failed', 600);
     toast(error.message);
     refreshStatus();
+    return false;
   } finally {
     inFlight.delete(key);
+  }
+}
+
+async function launch(app, button) {
+  haptic();
+  try {
+    await api('launch', { id: app.id });
+    flash(button, 'is-sent', 200);
+  } catch (error) {
+    flash(button, 'is-failed', 600);
+    toast(error.message);
   }
 }
 
@@ -292,7 +343,7 @@ async function scan() {
   renderLists();
   try {
     const answer = await api('scan', {});
-    state.found = answer.devices || [];
+    state.found = (answer.devices || []).filter(isValidDevice);
     if (!state.found.length) toast('Fant ingen TV. Prøv å legge til med IP.');
   } catch (error) {
     toast(error.message);
@@ -308,6 +359,28 @@ function openDevices({ scanNow = false } = {}) {
   if (scanNow) scan();
 }
 
+let removing = null;
+function askRemove(device) {
+  removing = device;
+  $('#removeText').textContent = `${device.name} fjernes fra listen. Du kan legge den til igjen senere.`;
+  $('#removeDialog').showModal();
+}
+
+function openPower() {
+  const caps = state.capabilities || {};
+  $('#powerOn').disabled = !caps.powerOn;
+  $('#powerOff').disabled = !state.ready;
+  const hints = [];
+  if (!caps.powerOn) {
+    hints.push(state.device?.type === 'lg'
+      ? 'Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på via Wi‑Fi» er aktivert på TV-en.'
+      : 'Denne Roku-enheten kan ikke slås på via nettverket.');
+  }
+  hints.push('TV-en kan ikke alltid slås på igjen via nettverket etter at den er slått av.');
+  $('#powerHint').textContent = hints.join(' ');
+  $('#powerDialog').showModal();
+}
+
 // ---------- Oppkobling ----------
 
 $$('[data-key]').forEach(bindKey);
@@ -317,6 +390,22 @@ $('#emptyManual').addEventListener('click', () => $('#manualDialog').showModal()
 $('#scan').addEventListener('click', scan);
 $('#manualOpen').addEventListener('click', () => $('#manualDialog').showModal());
 $$('[data-close]').forEach((el) => el.addEventListener('click', () => $(`#${el.dataset.close}`).close()));
+
+$('#noticeAction').addEventListener('click', (event) => {
+  if (!state.device) return;
+  if (event.currentTarget.dataset.action === 'repair') connect(state.device, { route: 'repair' });
+  else connect(state.device);
+});
+
+$('#removeConfirm').addEventListener('click', () => {
+  if (removing) {
+    state.saved = state.saved.filter((d) => !sameDevice(d, removing));
+    persist();
+    renderLists();
+  }
+  removing = null;
+  $('#removeDialog').close();
+});
 
 $('#manualForm').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -336,11 +425,11 @@ $('#textOpen').addEventListener('click', () => {
   $('#textDialog').showModal();
   $('#tvText').focus();
 });
+$('#textBackspace').addEventListener('click', (event) => send('Backspace', event.currentTarget));
 $('#textForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const text = $('#tvText').value.trim();
   if (!text) return;
-  $('#textDialog').close();
   try {
     await api('text', { text });
     $('#tvText').value = '';
@@ -350,10 +439,17 @@ $('#textForm').addEventListener('submit', async (event) => {
   }
 });
 
-$('#powerOpen').addEventListener('click', () => $('#powerDialog').showModal());
-$('#powerConfirm').addEventListener('click', () => {
+$('#powerOpen').addEventListener('click', openPower);
+$('#powerOff').addEventListener('click', () => {
   $('#powerDialog').close();
   send('PowerOff', $('#powerOpen'));
+});
+$('#powerOn').addEventListener('click', async () => {
+  $('#powerDialog').close();
+  if (await send('PowerOn', $('#powerOpen'), { requireReady: false })) {
+    toast('Slår på TV-en …');
+    refreshStatus();
+  }
 });
 
 const KEYBOARD = { ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Select', Backspace: 'Back', '+': 'VolumeUp', '-': 'VolumeDown', m: 'Mute' };
@@ -364,7 +460,7 @@ document.addEventListener('keydown', (event) => {
   const key = KEYBOARD[event.key];
   if (key && state.device) {
     event.preventDefault();
-    send(key, document.querySelector(`[data-key="${key}"]`));
+    send(key, document.querySelector(`[data-key="${key}"]:not([hidden])`));
   }
 });
 

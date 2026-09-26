@@ -6,7 +6,7 @@
   --surface: #17181b;
   --raised: #212226;
   --raised-hi: #2b2c31;
-  --line: #313238;
+  --line: #606166;
   --text: #ececed;
   --muted: #a1a2a8;
   --accent: #ff6b2c;
@@ -49,9 +49,10 @@ body {
   overscroll-behavior: none;
 }
 button, input { font: inherit; color: inherit; }
-button { cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+button { cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 [hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 h1, h2, h3 { margin: 0; line-height: 1.2; text-wrap: balance; }
 p { margin: 0; text-wrap: pretty; }
 code, .mono { font-family: ui-monospace, "SF Mono", "Roboto Mono", monospace; font-variant-numeric: tabular-nums; }
@@ -112,6 +113,9 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 
 /* Statuslinje: vises bare når noe krever oppmerksomhet */
 .notice {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
   margin: 0 0 var(--s-3);
   padding: var(--s-3) var(--s-4);
   border-radius: var(--r-m);
@@ -120,13 +124,34 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   color: var(--text);
   font-size: var(--t-s);
 }
+.notice p { flex: 1; }
 .notice[data-tone="busy"] { border-left-color: var(--accent); }
 .notice[data-tone="err"] { border-left-color: var(--err); }
 
 /* Fjernkontrollen: skyves ned mot tommelen */
-.remote { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-3), 3dvh, var(--s-6)); padding-top: var(--s-3); }
+.remote { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-3), 3dvh, var(--s-6)); padding-top: var(--s-3); }
 .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
-.row.transport { grid-template-columns: repeat(4, 1fr); }
+.row.transport { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
+
+/* Apper fra TV-en fyller den ledige plassen over kontrollene og ruller ved behov */
+.apps { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: var(--s-2); }
+.apps-title { font-size: var(--t-s); font-weight: 600; color: var(--muted); }
+.app-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); overflow-y: auto; min-height: 0; }
+.app-tile {
+  min-height: 48px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-m);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: var(--t-s);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition-property: transform, background-color;
+  transition-duration: var(--press);
+}
+.app-tile:active { transform: scale(0.96); background: var(--raised-hi); }
 
 .key, .rocker button, .dir, .ok {
   transition-property: transform, background-color, box-shadow, color;
@@ -165,6 +190,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 }
 .rocker button { border: 0; background: none; display: grid; place-items: center; min-height: 64px; }
 .rocker button:active { background: var(--raised-hi); }
+.rocker.is-unused { visibility: hidden; }
 .rocker-label { text-align: center; font-size: var(--t-xs); color: var(--muted); padding: var(--s-1) 0; }
 
 .dpad {
@@ -231,6 +257,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .button.danger { background: var(--err); border-color: var(--err); color: var(--on-danger); }
 .button:disabled { opacity: 0.55; cursor: default; }
+.button.small { min-height: 40px; padding: 0 var(--s-3); font-size: var(--t-s); flex: none; }
 
 /* Ark (dialoger) */
 .sheet {
