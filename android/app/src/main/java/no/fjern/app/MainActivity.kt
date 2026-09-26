@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
         val assets = WebViewAssetLoader.Builder()
             .setDomain(HOST)
             .addPathHandler("/api/icon/", IconHandler(bridge))
+            .addPathHandler("/api/ytthumb/", ThumbnailHandler(bridge))
             .addPathHandler("/", SecureAssetHandler(WebViewAssetLoader.AssetsPathHandler(this)))
             .build()
 
@@ -171,6 +172,17 @@ class MainActivity : ComponentActivity() {
                 Diagnostics.add("Ikon $path: ${e.message}")
                 WebResourceResponse("text/plain", "utf-8", 404, "Not Found", SECURITY_HEADERS, ByteArrayInputStream(ByteArray(0)))
             }
+        }
+    }
+
+    /** Miniatyrbilder til YouTube-modus, levert fra appens egen opprinnelse (CSP: img-src 'self'). */
+    private class ThumbnailHandler(private val bridge: Bridge) : WebViewAssetLoader.PathHandler {
+        override fun handle(path: String): WebResourceResponse = try {
+            val (type, bytes) = runBlocking { bridge.youtubeThumbnail(Uri.decode(path)) }
+            WebResourceResponse(type, null, 200, "OK", SECURITY_HEADERS + ("Cache-Control" to "private, max-age=86400"), ByteArrayInputStream(bytes))
+        } catch (e: Exception) {
+            Diagnostics.add("YouTube-bilde $path: ${e.message}")
+            WebResourceResponse("text/plain", "utf-8", 404, "Not Found", SECURITY_HEADERS, ByteArrayInputStream(ByteArray(0)))
         }
     }
 

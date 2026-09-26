@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createKeyStore, createLgSession, LG_STATE, MANIFEST_REVISION, NO_WAKE, PERMISSIONS, registrationPayload, youtubeSearchTarget } from '../lib/lg.mjs';
+import { createKeyStore, createLgSession, LG_STATE, MANIFEST_REVISION, NO_WAKE, PERMISSIONS, registrationPayload } from '../lib/lg.mjs';
 import { magicPacket, normalizeMac } from '../lib/wol.mjs';
 import { UserError } from '../lib/errors.mjs';
 
@@ -286,14 +286,14 @@ test('full fjernkontroll: tall, farger, guide og innstillinger går via pekersoc
   assert.equal(JSON.parse(tv.sent.control.at(-1)).uri, 'ssap://com.webos.service.ime/sendEnterKey');
 });
 
-test('YouTube-søk åpner YouTube med søket som contentTarget', async () => {
+test('YouTube-video spilles på TV-en med contentTarget (som casting)', async () => {
   const { tv, lg } = await readySession();
-  await lg.youtubeSearch('lofi hip hop');
+  await lg.playYoutube('rFZHOHl-L8A');
   const sent = JSON.parse(tv.sent.control.at(-1));
   assert.equal(sent.uri, 'ssap://system.launcher/launch');
   assert.equal(sent.payload.id, 'youtube.leanback.v4');
-  assert.equal(sent.payload.params.contentTarget, 'https://www.youtube.com/tv#/search?q=lofi%20hip%20hop');
-  assert.equal(youtubeSearchTarget('a&b=c'), 'https://www.youtube.com/tv#/search?q=a%26b%3Dc', 'søket kan ikke bryte ut av adressen');
+  assert.equal(sent.payload.params.contentTarget, 'https://www.youtube.com/tv?v=rFZHOHl-L8A');
+  await assert.rejects(lg.playYoutube('x&list=evil'), UserError, 'ugyldig video-id avvises');
 });
 
 test('innganger: bare gyldige id-er, og bare kjente innganger kan velges', async () => {

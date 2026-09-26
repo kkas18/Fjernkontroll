@@ -21,7 +21,7 @@ const fakeLg = {
   async apps() { return [{ id: 'netflix', name: 'Netflix', system: false, color: null }]; },
   async inputs() { return [{ id: 'HDMI_1', name: 'HDMI 1', connected: true }]; },
   async switchInput(id) { calls.push(['lg-input', id]); },
-  async youtubeSearch(query) { calls.push(['lg-search', query]); },
+  async playYoutube(id) { calls.push(['lg-yt', id]); },
   iconUrl(id) { return id === 'netflix' ? `http://127.0.0.1:${iconPort}/netflix.png` : null; },
   async launch(id) { if (id !== 'netflix') throw new UserError('Ukjent app.', 404); calls.push(['lg-launch', id]); },
   async forget(host) { calls.push(['lg-forget', host]); },
@@ -29,6 +29,10 @@ const fakeLg = {
 
 const fakeFetch = async (url, options = {}) => {
   calls.push(['fetch', options.method || 'GET', url]);
+  if (url.startsWith('https://www.youtube.com/results')) {
+    const video = { videoId: 'n61ULEU7CO0', title: { runs: [{ text: 'Lofi' }] }, lengthText: { simpleText: '3:00' } };
+    return new Response(`<script>var ytInitialData = ${JSON.stringify({ a: [{ videoRenderer: video }] })};</script>`);
+  }
   if (url.includes('192.168.1.99')) throw Object.assign(new Error('Tidsavbrudd'), { name: 'TimeoutError' });
   if (!rokuOnline) throw new TypeError('fetch failed');
   if (url.endsWith('/query/apps')) return new Response('<apps><app id="12">Netflix</app></apps>');
@@ -227,10 +231,15 @@ test('LG: modellnavnet erstatter standardnavnet, men ikke et eget navn', async (
 
 test('søk og innganger', async () => {
   await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42' } });
+  const search = await post('/api/ytsearch', { query: '  lofi  ' });
+  assert.equal(search.status, 200);
+  assert.deepEqual(search.json.videos, [{ id: 'n61ULEU7CO0', title: 'Lofi', channel: '', duration: '3:00', views: '' }]);
+  assert.equal((await post('/api/ytsearch', { query: '   ' })).status, 400);
   calls.length = 0;
-  assert.equal((await post('/api/search', { query: '  lofi  ' })).status, 200);
-  assert.deepEqual(calls.at(-1), ['lg-search', 'lofi']);
-  assert.equal((await post('/api/search', { query: '   ' })).status, 400);
+  assert.equal((await post('/api/ytplay', { id: 'n61ULEU7CO0' })).status, 200);
+  assert.deepEqual(calls.at(-1), ['lg-yt', 'n61ULEU7CO0']);
+  assert.equal((await post('/api/ytplay', { id: 'x&y' })).status, 400);
+  assert.equal((await request('/api/ytthumb/..%2F..%2Fetc')).status, 400);
   assert.deepEqual((await request('/api/inputs')).json.inputs, [{ id: 'HDMI_1', name: 'HDMI 1', connected: true }]);
   assert.equal((await post('/api/input', { id: 'HDMI_1' })).status, 200);
   assert.equal((await post('/api/input', { id: '../x' })).status, 400);
@@ -238,8 +247,8 @@ test('søk og innganger', async () => {
 
   await post('/api/connect', { device: { type: 'roku', host: '192.168.1.5' } });
   calls.length = 0;
-  assert.equal((await post('/api/search', { query: 'katter' })).status, 200);
-  assert.match(calls.at(-1)[2], /\/search\/browse\?keyword=katter&provider-id=837&launch=true$/);
+  assert.equal((await post('/api/ytplay', { id: 'n61ULEU7CO0' })).status, 200);
+  assert.equal(calls.at(-1)[2], 'http://192.168.1.5:8060/launch/837?contentID=n61ULEU7CO0&mediaType=movie');
 });
 
 test('lokale IP-er er påkrevd', async () => {

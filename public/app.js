@@ -621,7 +621,54 @@ $('#textOpen').addEventListener('click', () => {
   $('#tvText').focus();
 });
 $('#textBackspace').addEventListener('click', (event) => send('Backspace', event.currentTarget));
-// «Søk på YouTube» åpner YouTube på TV-en med søket ferdig (Enter i feltet gjør det samme).
+// YouTube-modus: søk på mobilen, se resultatene her, og trykk for å spille på TV-en (som casting).
+function videoRow(video) {
+  const li = document.createElement('li');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'yt-item';
+  button.setAttribute('aria-label', `Spill ${video.title} på TV-en`);
+  const thumb = document.createElement('span');
+  thumb.className = 'yt-thumb';
+  const img = document.createElement('img');
+  img.alt = '';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.src = `/api/ytthumb/${encodeURIComponent(video.id)}`;
+  img.addEventListener('error', () => img.remove());
+  thumb.append(img);
+  if (video.duration) {
+    const badge = document.createElement('span');
+    badge.className = video.duration === 'Direkte' ? 'yt-duration live' : 'yt-duration';
+    badge.textContent = video.duration;
+    thumb.append(badge);
+  }
+  const textBox = document.createElement('span');
+  textBox.className = 'yt-text';
+  const title = document.createElement('span');
+  title.className = 'yt-title';
+  title.textContent = video.title;
+  const meta = document.createElement('span');
+  meta.className = 'yt-meta';
+  meta.textContent = [video.channel, video.views].filter(Boolean).join(' · ');
+  textBox.append(title, meta);
+  button.append(thumb, textBox);
+  button.addEventListener('click', async () => {
+    haptic();
+    button.classList.add('is-playing');
+    try {
+      await api('ytplay', { id: video.id });
+      $('#textDialog').close();
+      toast('Spilles på TV-en.');
+    } catch (error) {
+      button.classList.remove('is-playing');
+      toast(error.message);
+    }
+  });
+  li.append(button);
+  return li;
+}
+
 $('#textForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const query = $('#tvText').value.trim();
@@ -629,12 +676,15 @@ $('#textForm').addEventListener('submit', async (event) => {
     $('#tvText').focus();
     return;
   }
+  $('#tvText').blur(); // skjul mobiltastaturet så resultatene synes
+  $('#ytStatus').textContent = `Søker etter «${query}» …`;
+  $('#ytResults').replaceChildren();
   try {
-    await api('search', { query });
-    $('#textDialog').close();
-    toast(`Søker etter «${query}» på YouTube …`);
+    const { videos } = await api('ytsearch', { query });
+    $('#ytStatus').textContent = videos.length ? `${videos.length} treff. Trykk på en video for å spille den på TV-en.` : `Ingen treff for «${query}».`;
+    $('#ytResults').replaceChildren(...videos.map(videoRow));
   } catch (error) {
-    toast(error.message);
+    $('#ytStatus').textContent = error.message;
   }
 });
 // «Skriv på TV» skriver i tekstfeltet som er åpent på TV-en; arket blir stående for mer skriving.

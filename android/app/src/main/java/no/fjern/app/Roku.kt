@@ -21,12 +21,11 @@ object Roku {
     /** YouTube-kanalen på Roku. */
     const val YOUTUBE_ID = "837"
 
-    /** ECP-søk som åpner YouTube med søkeordet (launch=true). */
-    fun search(host: String, query: String) {
-        val keyword = URLEncoder.encode(query, "UTF-8").replace("+", "%20")
-        val connection = open(host, "/search/browse?keyword=$keyword&provider-id=$YOUTUBE_ID&launch=true", "POST", 4000)
+    /** Spiller en YouTube-video direkte (dyplenke til YouTube-kanalen). */
+    fun playYoutube(host: String, videoId: String) {
+        val connection = open(host, "/launch/$YOUTUBE_ID?contentID=${URLEncoder.encode(videoId, "UTF-8")}&mediaType=movie", "POST", 4000)
         try {
-            if (connection.responseCode !in 200..299) throw UserError("Roku kunne ikke søke.", 502)
+            if (connection.responseCode !in 200..299) throw UserError("Roku kunne ikke spille videoen.", 502)
         } finally {
             connection.disconnect()
         }

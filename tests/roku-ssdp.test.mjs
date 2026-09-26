@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_RESPONSE_BYTES, ROKU_EXTRA_KEYS, ROKU_KEYS, parseRokuApps, readLimited, rokuCommand, rokuProbe, rokuSearch, rokuText } from '../lib/roku.mjs';
+import { MAX_RESPONSE_BYTES, ROKU_EXTRA_KEYS, ROKU_KEYS, parseRokuApps, readLimited, rokuCommand, rokuPlayYoutube, rokuProbe, rokuText } from '../lib/roku.mjs';
 import { LG_BUTTONS, LG_EXTRA_KEYS, LG_REQUESTS } from '../lib/lg.mjs';
 import { COMMANDS } from '../lib/validate.mjs';
 import { MAX_DEVICES, classify, createCollector, createDiscovery } from '../lib/ssdp.mjs';
@@ -133,15 +133,10 @@ test('ikoner: henting har tak på størrelse og sjekker svarstatus', async () =>
   }
 });
 
-test('Roku: YouTube-søk via ECP search/browse', async () => {
+test('Roku: YouTube-video via dyplenke til YouTube-kanalen', async () => {
   const { impl, calls } = fakeFetch(() => ok());
-  await rokuSearch('192.168.1.5', 'lofi hip hop & øl', { fetchImpl: impl });
-  const url = new URL(calls[0].url);
-  assert.equal(calls[0].method, 'POST');
-  assert.equal(url.pathname, '/search/browse');
-  assert.equal(url.searchParams.get('keyword'), 'lofi hip hop & øl');
-  assert.equal(url.searchParams.get('provider-id'), '837');
-  assert.equal(url.searchParams.get('launch'), 'true');
+  await rokuPlayYoutube('192.168.1.5', 'rFZHOHl-L8A', { fetchImpl: impl });
+  assert.deepEqual(calls[0], { url: 'http://192.168.1.5:8060/launch/837?contentID=rFZHOHl-L8A&mediaType=movie', method: 'POST' });
   await assert.rejects(rokuCommand('192.168.1.5', 'Red', { fetchImpl: impl }), /støttes ikke av Roku/);
 });
 

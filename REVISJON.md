@@ -132,3 +132,25 @@ Knapper TV-en ikke har, skjules automatisk ut fra `capabilities.keys`, som broen
 | 412×915 | 360×800 |
 | --- | --- |
 | ![](docs/revisjon/runde5/01-lg-412x915.png) | ![](docs/revisjon/runde5/06-lg-360x800.png) |
+
+---
+
+## Runde 6 (v2.6.0): YouTube-modus som caster
+
+**Brukerens tilbakemelding:** ⏯ virker. «Søk på YouTube» virket ikke. Adressen `youtube.com/tv#/search?q=` åpner ikke søket på LG. Brukeren ønsket YouTube-modusen fra før tilbake: søk på mobilen, se resultatene der, og spill valgt video på TV-en.
+
+### Endringer
+- **Søk på mobilen:** Broen leser YouTubes offentlige søkeside (`ytInitialData`) uten API-nøkkel, med tak på sidestørrelse (4 MB) og antall treff (20). Den sender informasjonskapselen `SOCS` for å hoppe over samtykkesiden i EØS. Resultatene har tittel, kanal, lengde («Direkte» for strømmer) og visninger.
+- **Miniatyrbilder** leveres gjennom broen (`/api/ytthumb/<id>`). Video-id-en valideres (`^[\w-]{11}$`), og bare ekte bilder godtas. CSP-en `img-src 'self'` er beholdt.
+- **Spill på TV-en:**
+  - LG: `system.launcher/launch` med `youtube.leanback.v4` og `contentTarget: https://www.youtube.com/tv?v=<id>`, samme metode som homebridge-webos-tv.
+  - Roku: `launch/837?contentID=<id>`.
+- Det gamle søket (`#/search?q=` og Roku `search/browse`) er fjernet.
+
+### Verifisering
+- `npm run verify`: **78/78**. Nye tester dekker tolking av søkesiden (også direkte, ugyldige id-er og tak), hoder og koding av søket, feil uten nett, validering av video-id og avspilling på LG og Roku.
+- Kotlin: **15/15**. I tillegg ble Kotlin-tolkingen kjørt mot den ekte YouTube-siden. Den ga de samme 19 treffene som Node.
+- Mot ekte YouTube fra broen: søk etter «lofi hip hop» og «nrk nyheter» ga riktige resultater og miniatyrbilder.
+- Chromium: søk → 19 treff med bilder → trykk → `ytplay` sendes, arket lukkes, og «Spilles på TV-en» vises.
+
+![](docs/revisjon/runde6/01-youtube-resultater.png)

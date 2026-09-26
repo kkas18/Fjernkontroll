@@ -99,10 +99,6 @@ class LgSession(
             "Subtitles", "Teletext", "Aspect", "Recent", "Enter",
         )
         const val YOUTUBE_APP_ID = "youtube.leanback.v4"
-
-        /** YouTube på TV åpner søket direkte med denne adressen som contentTarget. */
-        fun youtubeSearchTarget(query: String) =
-            "https://www.youtube.com/tv#/search?q=" + java.net.URLEncoder.encode(query, "UTF-8").replace("+", "%20")
         val REQUESTS: Map<String, Pair<String, JSONObject?>> = mapOf(
             "VolumeUp" to ("ssap://audio/volumeUp" to null),
             "VolumeDown" to ("ssap://audio/volumeDown" to null),
@@ -624,12 +620,12 @@ class LgSession(
         Unit
     }
 
-    /** Åpner YouTube med søket ferdig utfylt. Virker uansett hva som vises på TV-en. */
-    suspend fun youtubeSearch(query: String) = withContext(state) {
+    /** Spiller en YouTube-video på TV-en, som casting (contentTarget, som i homebridge-webos-tv). */
+    suspend fun playYoutube(videoId: String) = withContext(state) {
         if (!ready) throw UserError(status, 409)
         val id = apps.firstOrNull { it.id.contains("youtube", ignoreCase = true) }?.id ?: YOUTUBE_APP_ID
-        log("LG: YouTube-søk via $id")
-        request("ssap://system.launcher/launch", JSONObject().put("id", id).put("params", JSONObject().put("contentTarget", youtubeSearchTarget(query))))
+        log("LG: spiller YouTube-video $videoId")
+        request("ssap://system.launcher/launch", JSONObject().put("id", id).put("params", JSONObject().put("contentTarget", YouTube.tvVideoTarget(videoId))))
         Unit
     }
 

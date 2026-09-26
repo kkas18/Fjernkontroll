@@ -69,7 +69,7 @@
         <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>
       </button>
       <div class="bar-actions">
-        <button id="textOpen" class="icon-button" type="button" aria-label="Send tekst til TV-en"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
+        <button id="textOpen" class="icon-button" type="button" aria-label="Søk på YouTube eller skriv tekst"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
         <button id="powerOpen" class="icon-button" type="button" aria-label="Strøm"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg></button>
       </div>
     </header>
@@ -186,17 +186,18 @@
   <dialog id="textDialog" class="sheet" aria-labelledby="textTitle">
     <form id="textForm" method="dialog" novalidate>
       <div class="sheet-head">
-        <h2 id="textTitle">Skriv og søk</h2>
+        <h2 id="textTitle">YouTube og tekst</h2>
         <button class="icon-button" type="button" data-close="textDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
       </div>
-      <input id="tvText" class="field large" maxlength="140" autocomplete="off" enterkeyhint="search" placeholder="Søk eller skriv …" aria-label="Tekst">
+      <input id="tvText" class="field large" maxlength="140" autocomplete="off" enterkeyhint="search" placeholder="Søk på YouTube …" aria-label="Søk eller tekst">
       <button id="ytSearch" type="submit" class="button primary search-action"><svg class="icon" aria-hidden="true"><use href="#i-youtube"/></svg><span>Søk på YouTube</span></button>
       <div class="text-actions">
         <button id="textSend" type="button" class="button"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg><span>Skriv på TV</span></button>
         <button id="textBackspace" type="button" class="button icon-only" aria-label="Slett tegn"><svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg></button>
         <button id="textEnter" type="button" class="button icon-only" aria-label="Enter"><svg class="icon" aria-hidden="true"><use href="#i-enter"/></svg></button>
       </div>
-      <p id="textHint" class="hint">«Søk på YouTube» åpner YouTube på TV-en med søket ferdig. «Skriv på TV» skriver i tekstfeltet som er åpent på TV-en.</p>
+      <p id="ytStatus" class="hint" role="status" aria-live="polite">Søk på YouTube her, og trykk på en video for å spille den på TV-en. «Skriv på TV» skriver i tekstfeltet som er åpent på TV-en.</p>
+      <ul id="ytResults" class="yt-list" aria-label="Resultater fra YouTube"></ul>
     </form>
   </dialog>
 

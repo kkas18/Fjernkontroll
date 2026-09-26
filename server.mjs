@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { UserError, toUserMessage } from './lib/errors.mjs';
 import { validAppId, validCommand, validDevice, validInputId, validQuery, validText } from './lib/validate.mjs';
-import { ROKU_EXTRA_KEYS, rokuApps, rokuCommand, rokuIcon, rokuLaunch, rokuProbe, rokuSearch, rokuText } from './lib/roku.mjs';
+import { ROKU_EXTRA_KEYS, rokuApps, rokuCommand, rokuIcon, rokuLaunch, rokuPlayYoutube, rokuProbe, rokuText } from './lib/roku.mjs';
+import { searchYoutube, thumbnailUrl, validVideoId } from './lib/youtube.mjs';
 import { createIconCache, fetchBytes, sniffImage } from './lib/icons.mjs';
 import { createDiscovery } from './lib/ssdp.mjs';
 import { LG_EXTRA_KEYS, createKeyStore, createLgSession } from './lib/lg.mjs';
@@ -179,6 +180,20 @@ export function createBridge({
   }
 
   async function api(req, res, route) {
+    if (route.startsWith('/api/ytthumb/')) {
+      if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
+      const id = validVideoId(route.slice('/api/ytthumb/'.length));
+      let cached = icons.get(`yt:${id}`);
+      if (!cached) {
+        const bytes = await fetchBytes(thumbnailUrl(id));
+        const type = sniffImage(bytes);
+        if (!type) throw new UserError('Bildet er ikke et bilde.', 415);
+        cached = { type, bytes };
+        icons.set(`yt:${id}`, cached);
+      }
+      res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': cached.type, 'content-length': cached.bytes.length, 'cache-control': 'private, max-age=86400' });
+      return res.end(cached.bytes);
+    }
     if (route.startsWith('/api/icon/')) {
       if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
       let id;
@@ -244,11 +259,13 @@ export function createBridge({
         }
         return sendJson(res, 200, { ok: true });
       }
-      case '/api/search': {
+      case '/api/ytsearch':
+        return sendJson(res, 200, { videos: await searchYoutube(validQuery(input.query), { fetchImpl }) });
+      case '/api/ytplay': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
-        const query = validQuery(input.query);
-        if (selected.type === 'lg') await lg.youtubeSearch(query);
-        else await withRoku(() => rokuSearch(selected.host, query, { fetchImpl }));
+        const id = validVideoId(input.id);
+        if (selected.type === 'lg') await lg.playYoutube(id);
+        else await withRoku(() => rokuPlayYoutube(selected.host, id, { fetchImpl }));
         return sendJson(res, 200, { ok: true });
       }
       case '/api/launch': {

@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 import java.io.File
 import java.net.SocketTimeoutException
 import java.nio.file.Files
@@ -142,9 +143,20 @@ class BridgeLogicTest {
         assertFalse(Roku.KEYS.containsKey("Red"))
     }
 
-    @Test fun `YouTube-søk koder søket trygt`() {
-        assertEquals("https://www.youtube.com/tv#/search?q=lofi%20hip%20hop", LgSession.youtubeSearchTarget("lofi hip hop"))
-        assertEquals("https://www.youtube.com/tv#/search?q=a%26b%3Dc", LgSession.youtubeSearchTarget("a&b=c"))
+    @Test fun `YouTube-modus - søkesiden tolkes og video-id valideres`() {
+        val data = JSONObject().put("a", org.json.JSONArray().put(JSONObject().put("videoRenderer", JSONObject()
+            .put("videoId", "n61ULEU7CO0")
+            .put("title", JSONObject().put("runs", org.json.JSONArray().put(JSONObject().put("text", "Best of lofi"))))
+            .put("ownerText", JSONObject().put("runs", org.json.JSONArray().put(JSONObject().put("text", "Lofi Girl"))))
+            .put("lengthText", JSONObject().put("simpleText", "6:10:58"))
+            .put("shortViewCountText", JSONObject().put("simpleText", "57 mill.")))))
+        val videos = YouTube.parseSearchPage("<script>var ytInitialData = $data;</script>")
+        assertEquals(listOf(YouTube.Video("n61ULEU7CO0", "Best of lofi", "Lofi Girl", "6:10:58", "57 mill.")), videos)
+        assertEquals("https://www.youtube.com/tv?v=n61ULEU7CO0", YouTube.tvVideoTarget("n61ULEU7CO0"))
+        listOf("", "kort", "rFZHOHl-L8A&x=1", "../../etc/pa").forEach { bad ->
+            try { YouTube.videoId(bad); throw AssertionError(bad) } catch (_: UserError) {}
+        }
+        try { YouTube.parseSearchPage("<html>samtykke</html>"); throw AssertionError("forventet feil") } catch (_: UserError) {}
         assertEquals("lofi", Validate.query("  lofi  "))
         assertThrows { Validate.query("   ") }
         assertThrows { Validate.inputId("../x") }

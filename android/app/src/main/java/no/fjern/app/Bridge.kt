@@ -42,6 +42,15 @@ class Bridge(
         forEach { array.put(JSONObject().put("id", it.id).put("name", it.name).put("system", it.system).put("color", it.color ?: JSONObject.NULL)) }
     }
 
+    /** Miniatyrbilde for en YouTube-video, som (MIME-type, bytes). Brukes av /api/ytthumb/-ruten. */
+    suspend fun youtubeThumbnail(rawId: String): Pair<String, ByteArray> {
+        val id = YouTube.videoId(rawId)
+        icons.get("yt:$id")?.let { return it }
+        val bytes = withContext(Dispatchers.IO) { YouTube.thumbnail(id) }
+        val type = Icons.sniff(bytes) ?: throw UserError("Bildet er ikke et bilde.", 415)
+        return (type to bytes).also { icons.put("yt:$id", it) }
+    }
+
     /** Ikon for en app på valgt TV, som (MIME-type, bytes). Brukes av WebView-ens /api/icon/-rute. */
     suspend fun icon(rawId: String): Pair<String, ByteArray> {
         val id = Validate.appId(rawId)
@@ -137,6 +146,15 @@ class Bridge(
         if (route == "diagnostics") {
             return JSONObject().put("about", about).put("lines", JSONArray(Diagnostics.snapshot()))
         }
+        if (route == "ytsearch") {
+            val query = Validate.query(input?.optString("query"))
+            val videos = withContext(Dispatchers.IO) { YouTube.search(query) }
+            return JSONObject().put("videos", JSONArray().also { array ->
+                videos.forEach {
+                    array.put(JSONObject().put("id", it.id).put("title", it.title).put("channel", it.channel).put("duration", it.duration).put("views", it.views))
+                }
+            })
+        }
         if (route == "scan") {
             return JSONObject().put("devices", JSONArray().also { array -> discover().forEach { array.put(it.toJson()) } })
         }
@@ -197,10 +215,10 @@ class Bridge(
                 }
                 JSONObject().put("ok", true)
             }
-            "search" -> {
+            "ytplay" -> {
                 val device = selected ?: throw UserError("Velg en TV først.", 409)
-                val query = Validate.query(body.optString("query"))
-                if (device.type == "lg") lg.youtubeSearch(query) else withRoku { Roku.search(device.host, query) }
+                val id = YouTube.videoId(body.optString("id"))
+                if (device.type == "lg") lg.playYoutube(id) else withRoku { Roku.playYoutube(device.host, id) }
                 JSONObject().put("ok", true)
             }
             "launch" -> {
