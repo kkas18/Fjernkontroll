@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Samme symbol som PWA-ikonet: d-pad-ring med oransje OK. Innenfor den sikre sonen på 66 dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#2B2C31" android:strokeColor="#3A3B41" android:strokeWidth="0.8"
+        android:pathData="M24,54 a30,30 0 1,0 60,0 a30,30 0 1,0 -60,0 Z" />
+    <path android:strokeColor="#A1A2A8" android:strokeWidth="3.2" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M49.6,33.2 L54,28.8 L58.4,33.2 M49.6,74.8 L54,79.2 L58.4,74.8 M33.2,49.6 L28.8,54 L33.2,58.4 M74.8,49.6 L79.2,54 L74.8,58.4" />
+    <path android:fillColor="#FF6B2C"
+        android:pathData="M41.2,54 a12.8,12.8 0 1,0 25.6,0 a12.8,12.8 0 1,0 -25.6,0 Z" />
+</vector>

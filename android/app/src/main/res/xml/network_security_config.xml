@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Roku ECP (port 8060) og eldre LG-TV-er (ws://:3000) bruker ukryptert HTTP på lokalnettet.
+     Appen snakker bare med private IPv4-adresser; det håndheves i Validate.kt. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
