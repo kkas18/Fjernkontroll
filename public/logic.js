@@ -23,7 +23,7 @@ export function noticeFor({ bridge, device, ready, message, code }) {
   if (!bridge) return { text: BRIDGE_DOWN, tone: 'err', action: null };
   if (!device || ready) return { text: '', tone: 'info', action: null };
   const text = message || 'Kobler til …';
-  if (code === 'cert-changed') return { text, tone: 'err', action: { id: 'repair', label: 'Par på nytt' } };
+  if (code === 'cert-changed' || code === 'needs-repair') return { text, tone: 'err', action: { id: 'repair', label: 'Par på nytt' } };
   // Alle feiltilstander får en vei videre, ikke bare en melding.
   if (code === 'unreachable' || ERROR_WORDS.test(text)) return { text, tone: 'err', action: { id: 'retry', label: 'Prøv igjen' } };
   return { text, tone: 'busy', action: null };

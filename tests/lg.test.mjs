@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createKeyStore, createLgSession, LG_STATE, NO_WAKE } from '../lib/lg.mjs';
+import { createKeyStore, createLgSession, LG_STATE, MANIFEST_REVISION, NO_WAKE, PERMISSIONS, registrationPayload } from '../lib/lg.mjs';
 import { magicPacket, normalizeMac } from '../lib/wol.mjs';
 import { UserError } from '../lib/errors.mjs';
 
@@ -12,7 +12,7 @@ const HOST = '192.168.1.42';
 const TV_CERT = 'AA:BB:CC';
 
 // Etterligner en LG-TV: svarer på registrering, pekersocket og SSAP-kall.
-function fakeTv({ failSecure = false, failAll = false, approve = true, muted = false, fingerprint = TV_CERT } = {}) {
+function fakeTv({ failSecure = false, failAll = false, approve = true, muted = false, fingerprint = TV_CERT, pointerDenied = false } = {}) {
   const opened = [];
   const sockets = [];
   const sent = { control: [], pointer: [] };
@@ -34,7 +34,8 @@ function fakeTv({ failSecure = false, failAll = false, approve = true, muted = f
         return;
       }
       const uri = message.uri;
-      if (uri.endsWith('getPointerInputSocket')) reply({ type: 'response', id: message.id, payload: { socketPath: `ws://${HOST}:3000/pointer` } });
+      if (uri.endsWith('getPointerInputSocket') && pointerDenied) reply({ type: 'error', id: message.id, error: '401 insufficient permissions' });
+      else if (uri.endsWith('getPointerInputSocket')) reply({ type: 'response', id: message.id, payload: { socketPath: `ws://${HOST}:3000/pointer` } });
       else if (uri.endsWith('getStatus')) reply({ type: 'response', id: message.id, payload: { mute: muted } });
       else if (uri.endsWith('connectionmanager/getinfo')) reply({ type: 'response', id: message.id, payload: { wifiInfo: { macAddress: 'A8-23-FE-01-02-03' } } });
       else if (uri.endsWith('listLaunchPoints')) reply({ type: 'response', id: message.id, payload: { launchPoints: [{ id: 'netflix', title: 'Netflix' }, { id: 'bad id!', title: 'Ugyldig' }] } });
@@ -85,7 +86,7 @@ test('parer, lagrer nøkkel, sertifikatavtrykk og MAC, og blir klar', async () =
   const { tv, keyStore, lg } = await readySession();
   assert.equal(lg.ready, true);
   assert.equal(lg.state, LG_STATE.ready);
-  assert.deepEqual(keyStore.keys.get(HOST), { key: 'nøkkel-123', fingerprint: TV_CERT, mac: 'a8:23:fe:01:02:03' });
+  assert.deepEqual(keyStore.keys.get(HOST), { key: 'nøkkel-123', rev: MANIFEST_REVISION, fingerprint: TV_CERT, mac: 'a8:23:fe:01:02:03' });
   assert.equal(lg.canWake, true);
   assert.equal(tv.opened[0], `wss://${HOST}:3001/`, 'prøver sikker port først');
 });
@@ -230,3 +231,31 @@ test('nøkkellager: samtidige skrivinger går ikke tapt, filen er privat, gammel
   assert.deepEqual((await fs.readdir(path.dirname(file))).filter((f) => f.endsWith('.tmp')), []);
   await fs.rm(dir, { recursive: true, force: true });
 });
+
+test('registreringen ber om tillatelsen navigasjonen krever, uten falsk signatur', () => {
+  const payload = registrationPayload(undefined);
+  assert.ok(PERMISSIONS.includes('CONTROL_MOUSE_AND_KEYBOARD'));
+  assert.deepEqual(payload.manifest.permissions, PERMISSIONS);
+  assert.equal(payload.manifest.signatures, undefined);
+  assert.equal(payload.pairingType, 'PROMPT');
+  assert.equal(payload['client-key'], undefined);
+});
+
+test('nøkler fra eldre tillatelser gjenbrukes ikke, så TV-en spør på nytt', () => {
+  assert.equal(registrationPayload({ key: 'gammel' })['client-key'], undefined);
+  assert.equal(registrationPayload({ key: 'gammel', rev: 1 })['client-key'], undefined);
+  assert.equal(registrationPayload({ key: 'ny', rev: MANIFEST_REVISION })['client-key'], 'ny');
+});
+
+test('avvist navigasjon gir forklaring og kode for ny paring', async () => {
+  const logs = [];
+  const tv = fakeTv({ pointerDenied: true });
+  const lg = createLgSession({ keyStore: memoryKeys(), openSocket: tv.openSocket, log: (m) => logs.push(m) });
+  await lg.connect(HOST);
+  await settle();
+  assert.equal(lg.ready, false);
+  assert.equal(lg.state, LG_STATE.noPointer);
+  assert.equal(lg.code, 'needs-repair');
+  assert.ok(logs.some((m) => m.includes('401 insufficient permissions')), 'TV-ens feilmelding logges');
+});
+

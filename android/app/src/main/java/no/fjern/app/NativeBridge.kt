@@ -15,7 +15,7 @@ class NativeBridge(
     private val bridge: Bridge,
     private val scope: CoroutineScope,
 ) {
-    private val routes = setOf("status", "scan", "connect", "repair", "apps", "launch", "command", "text")
+    private val routes = setOf("status", "scan", "connect", "repair", "apps", "launch", "command", "text", "diagnostics")
 
     @JavascriptInterface
     fun request(id: String, route: String, body: String?) {

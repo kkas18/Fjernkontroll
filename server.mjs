@@ -11,6 +11,7 @@ import { createDiscovery } from './lib/ssdp.mjs';
 import { createKeyStore, createLgSession } from './lib/lg.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
 const MAX_BODY = 16_384;
 
 const MEDIA = new Map([
@@ -58,10 +59,22 @@ async function readJson(req) {
   return text ? JSON.parse(text) : {};
 }
 
+// De siste hendelsene i broen, slik at brukeren kan kopiere dem ved feilsøking. Ingen nøkler logges.
+function createDiagnostics(print, max = 150) {
+  const lines = [];
+  const log = (message) => {
+    lines.push(`${new Date().toTimeString().slice(0, 8)} ${message}`);
+    if (lines.length > max) lines.shift();
+    print(message);
+  };
+  return { log, lines };
+}
+
 export function createBridge({
   publicDir = path.join(root, 'public'),
   dataDir = path.join(root, 'data'),
-  log = (message) => console.log(message),
+  diagnostics = createDiagnostics((message) => console.log(message)),
+  log = diagnostics.log,
   fetchImpl = fetch,
   keyStore = createKeyStore(path.join(dataDir, 'lg-keys.json')),
   lg = createLgSession({ keyStore, log }),
@@ -124,9 +137,12 @@ export function createBridge({
   }
 
   async function api(req, res, route) {
-    if (route === '/api/status' || route === '/api/apps') {
+    if (route === '/api/status' || route === '/api/apps' || route === '/api/diagnostics') {
       if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
       if (route === '/api/status') return sendJson(res, 200, await status());
+      if (route === '/api/diagnostics') {
+        return sendJson(res, 200, { about: `Fjern ${version} · Node ${process.version} · ${process.platform}`, lines: diagnostics.lines.slice() });
+      }
       if (!selected) throw new UserError('Velg en TV først.', 409);
       const apps = selected.type === 'lg' ? await lg.apps() : await withRoku(() => rokuApps(selected.host, { fetchImpl }));
       if (selected.type === 'roku') rokuAppList = apps;
@@ -148,6 +164,7 @@ export function createBridge({
           markRoku(true);
         } else {
           selected = device;
+          log(`LG: kobler til ${device.host}`);
           await lg.connect(device.host);
         }
         return sendJson(res, 200, await status());

@@ -83,6 +83,34 @@ class BridgeLogicTest {
         dir.deleteRecursively()
     }
 
+    @Test fun `LG-registreringen ber om navigasjonstillatelse og parer på nytt ved gamle nøkler`() {
+        assertTrue(LgSession.PERMISSIONS.contains("CONTROL_MOUSE_AND_KEYBOARD"))
+        val fresh = LgSession.registrationPayload(null)
+        assertEquals("PROMPT", fresh.getString("pairingType"))
+        assertFalse(fresh.getJSONObject("manifest").has("signatures"))
+        assertEquals(LgSession.PERMISSIONS.size, fresh.getJSONObject("manifest").getJSONArray("permissions").length())
+        assertFalse(fresh.has("client-key"))
+        assertFalse(LgSession.registrationPayload(KeyStore.Entry(key = "gammel")).has("client-key"))
+        assertEquals("ny", LgSession.registrationPayload(KeyStore.Entry(key = "ny", rev = LgSession.MANIFEST_REVISION)).getString("client-key"))
+    }
+
+    @Test fun `nøkkelrevisjon lagres og leses`() {
+        val dir = Files.createTempDirectory("fjern").toFile()
+        val store = KeyStore(File(dir, "lg-keys.json"))
+        store.update("10.0.0.1", key = "k", rev = 2)
+        assertEquals(2, store.get("10.0.0.1")?.rev)
+        store.update("10.0.0.2", key = "gammel")
+        assertEquals(0, store.get("10.0.0.2")?.rev)
+        dir.deleteRecursively()
+    }
+
+    @Test fun `feilsøkingsloggen har tak`() {
+        repeat(200) { Diagnostics.add("linje $it") }
+        val lines = Diagnostics.snapshot()
+        assertEquals(150, lines.size)
+        assertTrue(lines.last().endsWith("linje 199"))
+    }
+
     private fun assertThrows(block: () -> Unit) {
         try {
             block()

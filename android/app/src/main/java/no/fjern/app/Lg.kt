@@ -55,18 +55,37 @@ class LgSession(
         const val UNREACHABLE = "Fikk ikke kontakt med LG TV. Sjekk at den er på og at IP-adressen stemmer."
         const val PAIRING_TIMEOUT = "Paringen ble ikke godkjent i tide. Velg TV-en og prøv igjen."
         const val REJECTED = "TV-en avviste paringen. Velg TV-en og prøv igjen."
-        const val NO_POINTER = "TV-en tilbyr ikke navigasjon via nettverket."
+        const val NO_POINTER = "TV-en ga ikke tilgang til navigasjon. Trykk «Par på nytt» og godkjenn forespørselen på TV-en."
         const val POINTER_LOST = "Navigasjonen ble frakoblet. Velg TV-en for å koble til igjen."
         const val LOST = "LG TV ble frakoblet. Velg TV-en for å koble til igjen."
         const val CERT_CHANGED = "TV-ens sertifikat er endret siden paringen. Det kan bety at noen utgir seg for TV-en. Par på nytt bare hvis TV-en er tilbakestilt eller oppdatert."
         const val NO_WAKE = "Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på via Wi‑Fi» er aktivert i TV-ens innstillinger."
 
-        private val PERMISSIONS = listOf(
-            "CONTROL_AUDIO", "CONTROL_DISPLAY", "CONTROL_INPUT_JOYSTICK", "CONTROL_INPUT_MEDIA_PLAYBACK",
-            "CONTROL_INPUT_TV", "CONTROL_POWER", "READ_APP_STATUS", "READ_CURRENT_CHANNEL",
-            "READ_INPUT_DEVICE_LIST", "WRITE_NOTIFICATION_TOAST", "CONTROL_INPUT_TEXT",
-            "READ_INSTALLED_APPS", "LAUNCH", "READ_NETWORK_STATE",
+        // Samme tillatelser som LG-biblioteket i Home Assistant (aiowebostv). CONTROL_MOUSE_AND_KEYBOARD
+        // er påkrevd for pekersocketen (navigasjon); uten den svarer TV-en «401 insufficient permissions».
+        val PERMISSIONS = listOf(
+            "APP_TO_APP", "CLOSE", "CONTROL_AUDIO", "CONTROL_DISPLAY", "CONTROL_INPUT_JOYSTICK",
+            "CONTROL_INPUT_MEDIA_PLAYBACK", "CONTROL_INPUT_MEDIA_RECORDING", "CONTROL_INPUT_TEXT", "CONTROL_INPUT_TV",
+            "CONTROL_MOUSE_AND_KEYBOARD", "CONTROL_POWER", "CONTROL_TV_SCREEN", "LAUNCH", "LAUNCH_WEBAPP",
+            "READ_APP_STATUS", "READ_COUNTRY_INFO", "READ_CURRENT_CHANNEL", "READ_INPUT_DEVICE_LIST",
+            "READ_INSTALLED_APPS", "READ_LGE_SDX", "READ_LGE_TV_INPUT_EVENTS", "READ_NETWORK_STATE",
+            "READ_NOTIFICATIONS", "READ_POWER_STATE", "READ_RUNNING_APPS", "READ_SETTINGS", "READ_TV_CHANNEL_LIST",
+            "READ_TV_CURRENT_TIME", "READ_UPDATE_INFO", "SEARCH", "TEST_OPEN", "TEST_PROTECTED", "TEST_SECURE",
+            "UPDATE_FROM_REMOTE_APP", "WRITE_NOTIFICATION_ALERT", "WRITE_NOTIFICATION_TOAST", "WRITE_SETTINGS",
         )
+
+        /** Økes når tillatelsene endres; eldre nøkler gir ikke de nye tillatelsene, så da parer vi på nytt. */
+        const val MANIFEST_REVISION = 2
+
+        fun registrationPayload(stored: KeyStore.Entry?): JSONObject {
+            val manifest = JSONObject()
+                .put("manifestVersion", 1)
+                .put("appVersion", "1.1")
+                .put("permissions", JSONArray(PERMISSIONS))
+            val payload = JSONObject().put("forcePairing", false).put("pairingType", "PROMPT").put("manifest", manifest)
+            if (stored?.key != null && stored.rev == MANIFEST_REVISION) payload.put("client-key", stored.key)
+            return payload
+        }
         val BUTTONS = mapOf("Up" to "UP", "Down" to "DOWN", "Left" to "LEFT", "Right" to "RIGHT", "Select" to "ENTER", "Back" to "BACK", "Home" to "HOME")
         val REQUESTS: Map<String, Pair<String, JSONObject?>> = mapOf(
             "VolumeUp" to ("ssap://audio/volumeUp" to null),
@@ -240,7 +259,9 @@ class LgSession(
         var last: Throwable? = null
         for (url in attempts) {
             try {
-                return openSocket(url, if (url.startsWith("wss:")) pinned else null, onMessage, onClose) to url.startsWith("wss:")
+                val socket = openSocket(url, if (url.startsWith("wss:")) pinned else null, onMessage, onClose)
+                log("LG: tilkoblet $url")
+                return socket to url.startsWith("wss:")
             } catch (e: CertificateMismatch) {
                 throw e
             } catch (e: Throwable) {
@@ -268,12 +289,14 @@ class LgSession(
     private suspend fun openPointer(gen: Int, retry: Boolean = true) {
         val path = try {
             request("ssap://com.webos.service.networkinput/getPointerInputSocket")?.optString("socketPath")
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log("LG: pekersocket avvist (${e.message})")
             null
         }
         if (!current(gen)) return
         if (path == null || !Regex("^wss?://").containsMatchIn(path)) {
             status = NO_POINTER
+            code = "needs-repair"
             return
         }
         try {
@@ -292,6 +315,7 @@ class LgSession(
             pointer = socket
             ready = true
             status = READY
+            log("LG: klar (navigasjon tilkoblet)")
             if (retry) host?.let { rememberMac(it) }
         } catch (e: Exception) {
             log("LG: pekersocket feilet (${e.message})")
@@ -307,6 +331,7 @@ class LgSession(
         if (waiting != null) {
             val payload = message.optJSONObject("payload")
             if (message.optString("type") == "error" || payload?.optBoolean("returnValue", true) == false) {
+                log("LG: $id avvist (${message.optString("error").ifEmpty { payload?.optString("errorText") ?: "ukjent" }})")
                 waiting.completeExceptionally(UserError("TV-en avviste kommandoen.", 502))
             } else {
                 waiting.complete(payload)
@@ -320,14 +345,16 @@ class LgSession(
                 val key = message.optJSONObject("payload")?.optString("client-key")?.ifEmpty { null }
                 val fp = socket.fingerprint
                 host?.let { target ->
-                    runCatching { keyStore.update(target, key = key, fingerprint = fp) }
+                    runCatching { keyStore.update(target, key = key, fingerprint = fp, rev = if (key != null) MANIFEST_REVISION else null) }
                         .onFailure { log("LG: kunne ikke lagre nøkkel (${it.message})") }
                 }
                 status = PREPARING
+                log("LG: paring godkjent")
                 scope.launch(state) { openPointer(gen) }
             }
             "error" -> {
                 pairingJob?.cancel()
+                log("LG: registrering avvist (${message.optString("error")})")
                 status = REJECTED
             }
         }
@@ -361,6 +388,7 @@ class LgSession(
                 },
             )
         } catch (e: CertificateMismatch) {
+            log("LG: sertifikatet stemmer ikke med det som ble låst ved paring")
             if (current(gen)) {
                 status = CERT_CHANGED
                 code = "cert-changed"
@@ -374,13 +402,7 @@ class LgSession(
         if (!current(gen)) return closeSocket(socket)
         control = socket
 
-        val manifest = JSONObject()
-            .put("manifestVersion", 1)
-            .put("appVersion", "1.0")
-            .put("permissions", JSONArray(PERMISSIONS))
-            .put("signatures", JSONArray().put(JSONObject().put("signatureVersion", 1).put("signature", "dummy_signature")))
-        val payload = JSONObject().put("forcePairing", false).put("pairingType", "PROMPT").put("manifest", manifest)
-        stored?.key?.let { payload.put("client-key", it) }
+        val payload = registrationPayload(stored)
         status = PAIRING
         socket.ws.send(JSONObject().put("type", "register").put("id", "register_0").put("payload", payload).toString())
         pairingJob = scope.launch(state) {

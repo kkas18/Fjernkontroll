@@ -307,6 +307,20 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .help summary { min-height: 48px; display: flex; align-items: center; font-weight: 600; cursor: pointer; }
 .help ol { margin: 0 0 var(--s-3); padding-left: var(--s-5); display: grid; gap: var(--s-2); }
 .help p { color: var(--muted); }
+.help .button { width: 100%; margin-top: var(--s-3); }
+.diag {
+  max-height: 50dvh;
+  overflow: auto;
+  margin: var(--s-3) 0;
+  padding: var(--s-3);
+  border-radius: var(--r-s);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: var(--t-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.sheet > .button { width: 100%; }
 
 /* Skjema */
 .segmented { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }

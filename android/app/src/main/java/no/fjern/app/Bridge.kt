@@ -20,6 +20,7 @@ class Bridge(
     private val scope: CoroutineScope,
     private val log: (String) -> Unit = {},
     private val rokuHealthTtlMs: Long = 10_000,
+    private val about: String = "Fjern",
 ) {
     private val lock = Mutex()
     private var selected: Device? = null
@@ -85,6 +86,9 @@ class Bridge(
     }
 
     private suspend fun dispatch(route: String, input: JSONObject?): JSONObject {
+        if (route == "diagnostics") {
+            return JSONObject().put("about", about).put("lines", JSONArray(Diagnostics.snapshot()))
+        }
         if (route == "scan") {
             return JSONObject().put("devices", JSONArray().also { array -> discover().forEach { array.put(it.toJson()) } })
         }
@@ -111,6 +115,7 @@ class Bridge(
                     markRoku(true)
                 } else {
                     selected = device
+                    log("LG: kobler til ${device.host}")
                     lg.connect(device.host)
                 }
                 status()

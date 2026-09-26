@@ -136,6 +136,8 @@
         <li>LG webOS: godkjenn forespørselen som vises på TV-en første gang.</li>
       </ol>
       <p>Støtter Roku og LG webOS. Samsung, Google TV og rene IR-TV-er støttes ikke. Alt skjer lokalt, uten konto eller sky.</p>
+      <p>LG: «LG Connect Apps» eller «Mobil TV på» må være slått på i TV-ens innstillinger (navnet varierer per modell).</p>
+      <button id="diagOpen" class="button" type="button">Vis feilsøkingslogg</button>
     </details>
   </dialog>
 
@@ -183,6 +185,16 @@
       <button id="powerOn" type="button" class="button">Slå på</button>
       <button id="powerOff" type="button" class="button danger">Slå av</button>
     </div>
+  </dialog>
+
+  <dialog id="diagDialog" class="sheet" aria-labelledby="diagTitle">
+    <div class="sheet-head">
+      <h2 id="diagTitle">Feilsøkingslogg</h2>
+      <button class="icon-button" type="button" data-close="diagDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <p class="hint">Kopier teksten og send den til den som hjelper deg. Den inneholder ingen paringsnøkler.</p>
+    <pre id="diagText" class="diag mono" tabindex="0"></pre>
+    <button id="diagCopy" type="button" class="button primary">Kopier</button>
   </dialog>
 
   <dialog id="removeDialog" class="sheet" aria-labelledby="removeTitle">

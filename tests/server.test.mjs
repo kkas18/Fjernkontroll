@@ -39,7 +39,7 @@ before(async () => {
     fetchImpl: fakeFetch,
     discover: async () => [{ type: 'roku', host: '192.168.1.5', name: 'Roku' }],
     rokuHealthTtl: 0,
-    log: () => {},
+    diagnostics: (() => { const lines = []; return { lines, log: (m) => lines.push(`00:00:00 ${m}`) }; })(),
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
@@ -165,6 +165,14 @@ test('LG: kobler til, capabilities, feil, slå på, apper og ny paring', async (
 test('ny paring er bare for LG', async () => {
   await post('/api/connect', { device: { type: 'roku', host: '192.168.1.5' } });
   assert.equal((await post('/api/repair')).status, 409);
+});
+
+test('feilsøkingsloggen viser versjon og hendelser', async () => {
+  await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42' } });
+  const res = await request('/api/diagnostics');
+  assert.equal(res.status, 200);
+  assert.match(res.json.about, /^Fjern \d+\.\d+\.\d+ · Node /);
+  assert.ok(res.json.lines.some((line) => line.includes('LG: kobler til 192.168.1.42')));
 });
 
 test('lokale IP-er er påkrevd', async () => {

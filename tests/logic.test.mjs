@@ -27,6 +27,7 @@ test('statuslinjen: tekst, tone og handling', () => {
   assert.equal(noticeFor({ bridge: true, device: tv, ready: false, message: 'Forbindelsen falt ut. Kobler til igjen …' }).tone, 'busy');
   assert.equal(noticeFor({ bridge: true, device: tv, ready: false, message: 'Slår på TV-en …' }).action, null);
   assert.equal(noticeFor({ bridge: true, device: tv, ready: false, message: 'x', code: 'cert-changed' }).action.id, 'repair');
+  assert.equal(noticeFor({ bridge: true, device: tv, ready: false, message: 'x', code: 'needs-repair' }).action.id, 'repair');
   assert.equal(noticeFor({ bridge: true, device: tv, ready: false, message: 'x', code: 'unreachable' }).action.id, 'retry');
 });
 

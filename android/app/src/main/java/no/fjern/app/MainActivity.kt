@@ -8,6 +8,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.ViewCompat
@@ -42,6 +44,7 @@ class MainActivity : ComponentActivity() {
 
     private fun log(message: String) {
         Log.i("Fjern", message)
+        Diagnostics.add(message)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -51,14 +54,19 @@ class MainActivity : ComponentActivity() {
         val keyStore = KeyStore(File(filesDir, "lg-keys.json"))
         lg = LgSession(keyStore, scope, ::log)
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager
-        val bridge = Bridge(lg, Ssdp(wifi), scope, ::log)
+        val bridge = Bridge(lg, Ssdp(wifi), scope, ::log, about = "Fjern ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
 
         webView = WebView(this)
         webView.setBackgroundColor(getColor(R.color.bg))
-        setContentView(webView)
+        // WebView-innhold ignorerer polstring, så den ligger i en ramme som får polstringen i stedet.
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(getColor(R.color.bg))
+            addView(webView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        }
+        setContentView(root)
 
-        // Systemlinjer: grensesnittet får polstring i stedet for å havne under status- og navigasjonsfeltet.
-        ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+        // Systemlinjer: grensesnittet havner under statuslinjen og over navigasjonsfeltet og tastaturet.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             WindowInsetsCompat.CONSUMED

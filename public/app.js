@@ -429,6 +429,35 @@ $('#noticeAction').addEventListener('click', (event) => {
   else connect(state.device);
 });
 
+$('#diagOpen').addEventListener('click', async () => {
+  let text;
+  try {
+    const { about, lines } = await api('diagnostics');
+    const status = `Status: ${state.ready ? 'klar' : 'ikke klar'} · ${state.message || '–'} · kode ${state.code || '–'}`;
+    const device = state.device ? `TV: ${typeLabel(state.device.type)} ${state.device.host}` : 'TV: ingen valgt';
+    text = [about, device, status, '', ...(lines.length ? lines : ['(ingen hendelser ennå)'])].join('\n');
+  } catch (error) {
+    text = `Kunne ikke hente loggen: ${error.message}`;
+  }
+  $('#diagText').textContent = text;
+  $('#diagDialog').showModal();
+});
+$('#diagCopy').addEventListener('click', async () => {
+  const text = $('#diagText').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Kopiert.');
+  } catch {
+    // Reserve: marker teksten slik at brukeren kan kopiere den selv.
+    const range = document.createRange();
+    range.selectNodeContents($('#diagText'));
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    toast('Marker teksten og kopier den.');
+  }
+});
+
 $('#removeConfirm').addEventListener('click', () => {
   if (removing) {
     state.saved = state.saved.filter((d) => !sameDevice(d, removing));
