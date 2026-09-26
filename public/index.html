@@ -1,67 +1,175 @@
 <!doctype html>
-<html lang="no">
+<html lang="nb">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b1422">
+  <meta name="theme-color" content="#0f1012">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="En elegant fjernkontroll for Roku og LG webOS på ditt eget nettverk.">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Fjern">
+  <meta name="description" content="Fjernkontroll for Roku og LG webOS på lokalnettet.">
   <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
   <link rel="stylesheet" href="/style.css">
-  <title>Fjern — TV-kontroll</title>
+  <title>Fjern</title>
 </head>
 <body>
-  <div class="shell">
-    <header class="header">
-      <div class="brand"><img src="/icons/icon-72.png" alt="" width="37" height="37"><span>FJERN</span></div>
-      <button id="deviceSwitch" class="device-switch" aria-label="Velg TV"><span class="dot" id="headerDot"></span><span id="headerName">Ingen TV valgt</span><span class="chevron">⌄</span></button>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7 14h10"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7"/><path d="M6 9.5V20h12V9.5"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z"/><path d="m16 9.5 5 5m0-5-5 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-rewind" viewBox="0 0 24 24"><path d="M11 7 5 12l6 5V7Z"/><path d="M19 7l-6 5 6 5V7Z"/></symbol>
+    <symbol id="i-forward" viewBox="0 0 24 24"><path d="m13 7 6 5-6 5V7Z"/><path d="m5 7 6 5-6 5V7Z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5L8 5.5Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 6v12M15.5 6v12"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></symbol>
+  </svg>
+
+  <div class="app">
+    <header class="bar">
+      <button id="deviceButton" class="device" type="button" aria-haspopup="dialog" aria-controls="devicesSheet">
+        <span id="led" class="led" aria-hidden="true"></span>
+        <span class="device-text"><span id="deviceName" class="device-name">Ingen TV</span><span id="deviceMeta" class="device-meta mono" hidden></span></span>
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </button>
+      <div class="bar-actions">
+        <button id="textOpen" class="icon-button" type="button" aria-label="Send tekst til TV-en"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
+        <button id="powerOpen" class="icon-button" type="button" aria-label="Slå av TV-en"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg></button>
+      </div>
     </header>
-    <main>
-      <section id="remoteView" class="view active" aria-label="Fjernkontroll">
-        <div class="intro"><div class="eyebrow">UNIVERSAL KONTROLL</div><h1>Din fjernkontroll.<br><em>Endelig samlet.</em></h1><p id="subtitle">Velg en TV for å komme i gang.</p></div>
-        <div class="status-card"><div class="status-copy"><span class="status-label"><span class="status-orb" id="statusOrb"></span><span id="statusTitle">IKKE TILKOBLET</span></span><span class="status-description" id="statusDescription">Koble til en TV på samme nettverk.</span></div><button id="power" class="power" aria-label="Slå av TV" title="Slå av TV"><svg viewBox="0 0 24 24"><path d="M12 2.8v8.8M6.6 5.8a9 9 0 1 0 10.8 0"/></svg></button></div>
-        <div id="noDevice" class="empty-state"><div class="empty-graphic"><span>◎</span></div><h2>Alt på ett sted</h2><p>Finn TV-en din på Wi‑Fi, og styr den fra et grensesnitt som føles like godt som det ser ut.</p><button id="startConnect" class="button primary">Finn en TV <span>↗</span></button></div>
-        <div id="remoteControls" hidden>
-          <div class="section-heading"><span>NAVIGASJON</span><span class="divider"></span></div>
-          <div class="pad-card"><div class="dpad">
-            <button class="pad-key top" data-key="Up" aria-label="Opp"><svg viewBox="0 0 24 24"><path d="m6 14 6-6 6 6"/></svg></button>
-            <button class="pad-key left" data-key="Left" aria-label="Venstre"><svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></svg></button>
-            <button class="pad-key center" data-key="Select" aria-label="OK">OK</button>
-            <button class="pad-key right" data-key="Right" aria-label="Høyre"><svg viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></svg></button>
-            <button class="pad-key bottom" data-key="Down" aria-label="Ned"><svg viewBox="0 0 24 24"><path d="m6 10 6 6 6-6"/></svg></button>
-          </div></div>
-          <div class="quick-row"><button class="key slim" data-key="Home"><span class="key-icon">⌂</span> Hjem</button><button class="key slim" data-key="Back"><span class="key-icon">↶</span> Tilbake</button></div>
-          <div class="section-heading"><span>LYD & KANAL</span><span class="divider"></span></div>
-          <div class="volume-row"><button class="key" data-key="VolumeDown" aria-label="Volum ned">−</button><button class="key mute" data-key="Mute" aria-label="Demp lyd"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4Zm12-1 4 8m0-8-4 8"/></svg><span>Lyd av</span></button><button class="key" data-key="VolumeUp" aria-label="Volum opp">+</button></div>
-          <div class="quick-row channel-row"><button class="key slim" data-key="ChannelDown">Kanal <strong>−</strong></button><button class="key slim" data-key="ChannelUp">Kanal <strong>+</strong></button></div>
-          <div class="section-heading"><span>AVSPILLING</span><span class="divider"></span></div>
-          <div class="play-row"><button class="key" data-key="Rewind" aria-label="Spol tilbake">≪</button><button class="key" data-key="Pause" aria-label="Pause">Ⅱ</button><button class="key play" data-key="Play" aria-label="Spill av">▶</button><button class="key" data-key="FastForward" aria-label="Spol frem">≫</button></div>
-          <button id="textOpen" class="button outline text-action">Tast inn tekst <span>↗</span></button>
-          <p id="capabilityNote" class="note"></p>
+
+    <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+
+    <main id="remote" class="remote" aria-label="Fjernkontroll" hidden>
+      <div class="row">
+        <button class="key" type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
+        <button class="key" type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
+        <button class="key" type="button" data-key="Mute"><svg class="icon" aria-hidden="true"><use href="#i-mute"/></svg><span>Lyd av</span></button>
+      </div>
+
+      <div class="cluster">
+        <div class="rocker" role="group" aria-label="Volum">
+          <button type="button" data-key="VolumeUp" data-repeat aria-label="Volum opp"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          <span class="rocker-label" aria-hidden="true">Vol</span>
+          <button type="button" data-key="VolumeDown" data-repeat aria-label="Volum ned"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
         </div>
-      </section>
-      <section id="devicesView" class="view" aria-label="TV-er"><div class="intro"><div class="eyebrow">TILKOBLINGER</div><h1>Dine TV-er.<br><em>Ett trykk unna.</em></h1><p>Alle skjermene dine på ett sted.</p></div>
-        <div class="action-stack"><button id="scan" class="button primary">Søk på Wi‑Fi <span>↻</span></button><button id="manualOpen" class="button outline">Legg til med IP-adresse <span>+</span></button></div>
-        <div class="section-heading"><span>LAGREDE ENHETER</span><span class="divider"></span></div><div id="savedList" class="device-list"></div>
-        <div class="section-heading"><span>FUNNET PÅ NETTVERKET</span><span class="divider"></span></div><div id="foundList" class="device-list"></div>
-      </section>
-      <section id="helpView" class="view" aria-label="Hjelp"><div class="intro"><div class="eyebrow">KOM I GANG</div><h1>Enkelt å koble til.<br><em>Enkelt å bruke.</em></h1><p>Fire steg til din nye fjernkontroll.</p></div>
-        <div class="help-card"><b>01</b><div><h2>Samme Wi‑Fi</h2><p>Telefon og TV må være på samme lokale nettverk. Gjestenett kan blokkere tilkoblingen.</p></div></div>
-        <div class="help-card"><b>02</b><div><h2>Start den lokale broen</h2><p>Broen kjører på telefonen i Termux. PWA-en åpnes på <code>localhost:8765</code>. Den må kjøre mens du styrer TV-en.</p></div></div>
-        <div class="help-card"><b>03</b><div><h2>Finn din TV</h2><p>Bruk automatisk søk eller legg inn lokal IP-adresse. Roku krever «Control by mobile apps: Enabled».</p></div></div>
-        <div class="help-card"><b>04</b><div><h2>Godkjenn LG</h2><p>LG webOS viser en forespørsel på TV-en første gang. Godkjenn den med vanlig fjernkontroll.</p></div></div>
-        <div class="compat"><span class="eyebrow">KOMPATIBILITET</span><p>Roku TV og Roku-enheter via ECP. LG webOS via lokal paring. Noen knapper avhenger av modell. Samsung, Google TV og IR-TV-er støttes ikke i denne versjonen.</p><p>Ingen konto eller skytjeneste. Kommandoene går lokalt mellom telefonen og TV-en.</p></div>
-      </section>
+
+        <div class="dpad" role="group" aria-label="Navigasjon">
+          <button class="dir up" type="button" data-key="Up" data-repeat aria-label="Opp"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+          <button class="dir left" type="button" data-key="Left" data-repeat aria-label="Venstre"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
+          <button class="dir right" type="button" data-key="Right" data-repeat aria-label="Høyre"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button>
+          <button class="dir down" type="button" data-key="Down" data-repeat aria-label="Ned"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+          <button class="ok" type="button" data-key="Select">OK</button>
+        </div>
+
+        <div class="rocker" role="group" aria-label="Kanal">
+          <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+          <span class="rocker-label" aria-hidden="true">Kan</span>
+          <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+        </div>
+      </div>
+
+      <div class="row transport" role="group" aria-label="Avspilling">
+        <button class="key" type="button" data-key="Rewind" aria-label="Spol tilbake"><svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg></button>
+        <button class="key" type="button" data-key="Play" aria-label="Spill av"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button class="key" type="button" data-key="Pause" aria-label="Pause"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg></button>
+        <button class="key" type="button" data-key="FastForward" aria-label="Spol fram"><svg class="icon" aria-hidden="true"><use href="#i-forward"/></svg></button>
+      </div>
     </main>
-    <nav class="bottom-nav" aria-label="Hovedmeny"><button class="nav-item active" data-view="remote"><span class="nav-icon">◉</span>Kontroll</button><button class="nav-item" data-view="devices"><span class="nav-icon">▣</span>TV-er</button><button class="nav-item" data-view="help"><span class="nav-icon">ⓘ</span>Hjelp</button></nav>
+
+    <section id="empty" class="empty" aria-labelledby="emptyTitle" hidden>
+      <h1 id="emptyTitle">Ingen TV valgt</h1>
+      <p>Telefonen og TV-en må være på samme Wi‑Fi.</p>
+      <div class="stack">
+        <button id="emptyScan" class="button primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>Søk etter TV</button>
+        <button id="emptyManual" class="button" type="button">Legg til med IP-adresse</button>
+      </div>
+    </section>
   </div>
-  <dialog id="manualDialog" class="dialog"><form id="manualForm" method="dialog"><div class="dialog-top"><span class="eyebrow">NY TV</span><button type="button" class="close" data-close="manualDialog" aria-label="Lukk">×</button></div><h2>Legg til med IP</h2><p>Finn IP-adressen under nettverksinnstillinger på TV-en.</p><label for="deviceType">TV-type</label><select id="deviceType"><option value="roku">Roku</option><option value="lg">LG webOS</option></select><label for="ip">Lokal IP-adresse</label><input id="ip" type="text" inputmode="decimal" autocomplete="off" placeholder="192.168.1.42" required><button type="submit" class="button primary">Koble til <span>↗</span></button></form></dialog>
-  <dialog id="textDialog" class="dialog"><form id="textForm" method="dialog"><div class="dialog-top"><span class="eyebrow">TEKSTINNTASTING</span><button type="button" class="close" data-close="textDialog" aria-label="Lukk">×</button></div><h2>Send tekst til TV</h2><p>Velg først et tekstfelt på TV-en.</p><label for="tvText">Tekst</label><input id="tvText" maxlength="140" autocomplete="off" placeholder="Skriv her …" required><button type="submit" class="button primary">Send tekst <span>↗</span></button></form></dialog>
-  <dialog id="powerDialog" class="dialog"><div class="dialog-top"><span class="eyebrow">STRØM</span><button type="button" class="close" data-close="powerDialog" aria-label="Lukk">×</button></div><h2>Slå av TV-en?</h2><p>Det er ikke sikkert den kan slås på igjen via nettverket. Bruk vanlig fjernkontroll ved behov.</p><div class="dialog-actions"><button type="button" class="button outline" data-close="powerDialog">Avbryt</button><button id="powerConfirm" type="button" class="button primary">Slå av</button></div></dialog>
-  <div id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="devicesSheet" class="sheet" aria-labelledby="devicesTitle">
+    <div class="sheet-head">
+      <h2 id="devicesTitle">TV-er</h2>
+      <button class="icon-button" type="button" data-close="devicesSheet" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="stack two">
+      <button id="scan" class="button primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span id="scanLabel">Søk</span></button>
+      <button id="manualOpen" class="button" type="button">Legg til IP</button>
+    </div>
+    <h3 class="list-title">Lagret</h3>
+    <ul id="savedList" class="device-list"></ul>
+    <h3 class="list-title">Funnet på nettverket</h3>
+    <ul id="foundList" class="device-list"></ul>
+    <details class="help">
+      <summary>Slik kobler du til</summary>
+      <ol>
+        <li>Telefon og TV må være på samme Wi‑Fi. Gjestenett blokkerer ofte tilkoblingen.</li>
+        <li>Broen må kjøre i Termux: <code>node server.mjs</code>. Appen åpnes på <code>localhost:8765</code>.</li>
+        <li>Roku: slå på <i>Settings → System → Advanced system settings → Control by mobile apps</i>.</li>
+        <li>LG webOS: godkjenn forespørselen som vises på TV-en første gang.</li>
+      </ol>
+      <p>Støtter Roku og LG webOS. Samsung, Google TV og rene IR-TV-er støttes ikke. Alt skjer lokalt, uten konto eller sky.</p>
+    </details>
+  </dialog>
+
+  <dialog id="manualDialog" class="sheet" aria-labelledby="manualTitle">
+    <form id="manualForm" method="dialog" novalidate>
+      <div class="sheet-head">
+        <h2 id="manualTitle">Legg til med IP</h2>
+        <button class="icon-button" type="button" data-close="manualDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <fieldset class="segmented">
+        <legend>Type</legend>
+        <label><input type="radio" name="deviceType" value="roku" checked><span>Roku</span></label>
+        <label><input type="radio" name="deviceType" value="lg"><span>LG webOS</span></label>
+      </fieldset>
+      <label class="field-label" for="ip">IP-adresse</label>
+      <input id="ip" class="field mono" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.42" aria-describedby="ipHint" required>
+      <p id="ipHint" class="hint">Står under nettverksinnstillinger på TV-en.</p>
+      <button type="submit" class="button primary">Koble til</button>
+    </form>
+  </dialog>
+
+  <dialog id="textDialog" class="sheet" aria-labelledby="textTitle">
+    <form id="textForm" method="dialog" novalidate>
+      <div class="sheet-head">
+        <h2 id="textTitle">Send tekst</h2>
+        <button class="icon-button" type="button" data-close="textDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <label class="field-label" for="tvText">Tekst</label>
+      <input id="tvText" class="field" maxlength="140" autocomplete="off" enterkeyhint="send" aria-describedby="textHint" required>
+      <p id="textHint" class="hint">Marker et tekstfelt på TV-en først.</p>
+      <button type="submit" class="button primary">Send</button>
+    </form>
+  </dialog>
+
+  <dialog id="powerDialog" class="sheet" aria-labelledby="powerTitle">
+    <div class="sheet-head">
+      <h2 id="powerTitle">Slå av TV-en?</h2>
+    </div>
+    <p class="hint">Den kan ikke alltid slås på igjen via nettverket. Da må du bruke den vanlige fjernkontrollen.</p>
+    <div class="stack two">
+      <button type="button" class="button" data-close="powerDialog">Avbryt</button>
+      <button id="powerConfirm" type="button" class="button danger">Slå av</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="alert"></div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>
