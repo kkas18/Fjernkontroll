@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_RESPONSE_BYTES, ROKU_KEYS, parseRokuApps, readLimited, rokuCommand, rokuProbe, rokuText } from '../lib/roku.mjs';
+import { MAX_RESPONSE_BYTES, ROKU_EXTRA_KEYS, ROKU_KEYS, parseRokuApps, readLimited, rokuCommand, rokuProbe, rokuSearch, rokuText } from '../lib/roku.mjs';
+import { LG_BUTTONS, LG_EXTRA_KEYS, LG_REQUESTS } from '../lib/lg.mjs';
 import { COMMANDS } from '../lib/validate.mjs';
 import { MAX_DEVICES, classify, createCollector, createDiscovery } from '../lib/ssdp.mjs';
 import { UserError } from '../lib/errors.mjs';
@@ -15,8 +16,15 @@ function fakeFetch(handler) {
 }
 const ok = (body = '') => ({ ok: true, text: async () => body });
 
-test('alle appkommandoer har en gyldig Roku ECP-tast', () => {
-  for (const command of COMMANDS) assert.ok(ROKU_KEYS[command], command);
+test('alle kommandoer støttes av minst én TV-type, og capabilities stemmer med tastene', () => {
+  const lgSupports = (key) => Boolean(LG_BUTTONS[key] || LG_REQUESTS[key] || key === 'Mute' || key === 'PowerOn');
+  for (const command of COMMANDS) assert.ok(ROKU_KEYS[command] || lgSupports(command), command);
+  for (const key of ROKU_EXTRA_KEYS) assert.ok(ROKU_KEYS[key], `Roku mangler ${key}`);
+  for (const key of LG_EXTRA_KEYS) assert.ok(lgSupports(key), `LG mangler ${key}`);
+  assert.equal(ROKU_KEYS.Num7, 'Lit_7');
+  assert.equal(LG_BUTTONS.Guide, 'PROGRAM');
+  assert.equal(LG_BUTTONS.Settings, 'MENU');
+  assert.equal(LG_BUTTONS.Red, 'RED');
   assert.equal(ROKU_KEYS.Rewind, 'Rev');
   assert.equal(ROKU_KEYS.FastForward, 'Fwd');
   assert.equal(ROKU_KEYS.Pause, 'Play');
@@ -122,5 +130,17 @@ test('ikoner: henting har tak på størrelse og sjekker svarstatus', async () =>
   } finally {
     server.close();
   }
+});
+
+test('Roku: YouTube-søk via ECP search/browse', async () => {
+  const { impl, calls } = fakeFetch(() => ok());
+  await rokuSearch('192.168.1.5', 'lofi hip hop & øl', { fetchImpl: impl });
+  const url = new URL(calls[0].url);
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(url.pathname, '/search/browse');
+  assert.equal(url.searchParams.get('keyword'), 'lofi hip hop & øl');
+  assert.equal(url.searchParams.get('provider-id'), '837');
+  assert.equal(url.searchParams.get('launch'), 'true');
+  await assert.rejects(rokuCommand('192.168.1.5', 'Red', { fetchImpl: impl }), /støttes ikke av Roku/);
 });
 

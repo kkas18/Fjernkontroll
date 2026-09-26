@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createKeyStore, createLgSession, LG_STATE, MANIFEST_REVISION, NO_WAKE, PERMISSIONS, registrationPayload } from '../lib/lg.mjs';
+import { createKeyStore, createLgSession, LG_STATE, MANIFEST_REVISION, NO_WAKE, PERMISSIONS, registrationPayload, youtubeSearchTarget } from '../lib/lg.mjs';
 import { magicPacket, normalizeMac } from '../lib/wol.mjs';
 import { UserError } from '../lib/errors.mjs';
 
@@ -42,6 +42,9 @@ function fakeTv({ failSecure = false, failAll = false, approve = true, muted = f
         { id: 'netflix', title: 'Netflix', bgColor: '#E50914', icon: `http://${HOST}:3000/resources/netflix.png` },
         { id: 'com.palmdts.devmode', title: 'Developer Mode', systemApp: true, icon: 'http://evil.example/x.png' },
         { id: 'bad id!', title: 'Ugyldig' },
+      ] } });
+      else if (uri.endsWith('getExternalInputList')) reply({ type: 'response', id: message.id, payload: { devices: [
+        { id: 'HDMI_1', label: 'HDMI 1', connected: true }, { id: 'HDMI_2', label: 'PlayStation', connected: false }, { id: 'bad id!', label: 'x' },
       ] } });
       else if (uri.endsWith('getSystemInfo')) reply({ type: 'response', id: message.id, payload: { modelName: 'OLED55C14LB' } });
       else if (uri.endsWith('channelUp')) reply({ type: 'error', id: message.id, error: '401 insufficient permissions' });
@@ -269,5 +272,33 @@ test('avvist navigasjon gir forklaring og kode for ny paring', async () => {
   assert.equal(lg.state, LG_STATE.noPointer);
   assert.equal(lg.code, 'needs-repair');
   assert.ok(logs.some((m) => m.includes('401 insufficient permissions')), 'TV-ens feilmelding logges');
+});
+
+test('full fjernkontroll: tall, farger, guide og innstillinger går via pekersocketen', async () => {
+  const { tv, lg } = await readySession();
+  for (const [key, name] of [['Num7', '7'], ['Red', 'RED'], ['Guide', 'PROGRAM'], ['Settings', 'MENU'], ['Exit', 'EXIT']]) {
+    await lg.command(key);
+    assert.equal(tv.sent.pointer.at(-1), `type:button\nname:${name}\n\n`, key);
+  }
+  await lg.command('Enter');
+  assert.equal(JSON.parse(tv.sent.control.at(-1)).uri, 'ssap://com.webos.service.ime/sendEnterKey');
+});
+
+test('YouTube-søk åpner YouTube med søket som contentTarget', async () => {
+  const { tv, lg } = await readySession();
+  await lg.youtubeSearch('lofi hip hop');
+  const sent = JSON.parse(tv.sent.control.at(-1));
+  assert.equal(sent.uri, 'ssap://system.launcher/launch');
+  assert.equal(sent.payload.id, 'youtube.leanback.v4');
+  assert.equal(sent.payload.params.contentTarget, 'https://www.youtube.com/tv#/search?q=lofi%20hip%20hop');
+  assert.equal(youtubeSearchTarget('a&b=c'), 'https://www.youtube.com/tv#/search?q=a%26b%3Dc', 'søket kan ikke bryte ut av adressen');
+});
+
+test('innganger: bare gyldige id-er, og bare kjente innganger kan velges', async () => {
+  const { tv, lg } = await readySession();
+  assert.deepEqual(await lg.inputs(), [{ id: 'HDMI_1', name: 'HDMI 1', connected: true }, { id: 'HDMI_2', name: 'PlayStation', connected: false }]);
+  await lg.switchInput('HDMI_2');
+  assert.deepEqual(JSON.parse(tv.sent.control.at(-1)).payload, { inputId: 'HDMI_2' });
+  await assert.rejects(lg.switchInput('HDMI_9'), UserError);
 });
 

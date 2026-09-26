@@ -165,6 +165,7 @@ function render() {
   const mode = transportMode(capabilities);
   $$('[data-transport]').forEach((el) => { el.hidden = el.dataset.transport !== mode; });
   $('#channelRocker').classList.toggle('is-unused', capabilities?.channels === false);
+  applyCapabilities(capabilities);
 
   renderApps();
   announce();
@@ -209,6 +210,23 @@ function favTile(label, icon, onClick) {
   button.append(icon, text);
   button.addEventListener('click', onClick);
   return button;
+}
+
+// Taster og funksjoner TV-en ikke har, skjules. Talltaster og fargetaster beholder plassen sin
+// (så rutenettet ikke hopper), resten fjernes helt.
+function supports(capabilities, cap) {
+  if (!capabilities) return false;
+  if (cap in capabilities) return Boolean(capabilities[cap]);
+  return Array.isArray(capabilities.keys) && capabilities.keys.includes(cap);
+}
+function applyCapabilities(capabilities) {
+  for (const el of $$('[data-cap]')) {
+    const ok = supports(capabilities, el.dataset.cap);
+    if (el.classList.contains('num')) el.classList.toggle('is-unavailable', !ok);
+    else el.hidden = !ok;
+  }
+  $('.color-keys').hidden = !$$('.color-keys [data-cap]').some((el) => !el.hidden);
+  $('#ytSearch').hidden = capabilities?.search !== 'youtube';
 }
 
 function renderApps() {
@@ -605,18 +623,79 @@ $('#textOpen').addEventListener('click', () => {
   $('#tvText').focus();
 });
 $('#textBackspace').addEventListener('click', (event) => send('Backspace', event.currentTarget));
+// «Søk på YouTube» åpner YouTube på TV-en med søket ferdig (Enter i feltet gjør det samme).
 $('#textForm').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const text = $('#tvText').value.trim();
-  if (!text) return;
+  const query = $('#tvText').value.trim();
+  if (!query) {
+    $('#tvText').focus();
+    return;
+  }
   try {
-    await api('text', { text });
-    $('#tvText').value = '';
-    toast('Tekst sendt.');
+    await api('search', { query });
+    $('#textDialog').close();
+    toast(`Søker etter «${query}» på YouTube …`);
   } catch (error) {
     toast(error.message);
   }
 });
+// «Skriv på TV» skriver i tekstfeltet som er åpent på TV-en; arket blir stående for mer skriving.
+$('#textSend').addEventListener('click', async () => {
+  const text = $('#tvText').value;
+  if (!text.trim()) {
+    $('#tvText').focus();
+    return;
+  }
+  try {
+    await api('text', { text });
+    $('#tvText').value = '';
+    toast('Tekst sendt til TV-en.');
+  } catch (error) {
+    toast(error.message);
+  }
+});
+$('#textEnter').addEventListener('click', (event) => send('Enter', event.currentTarget));
+
+$('#numOpen').addEventListener('click', () => $('#numSheet').showModal());
+$('#moreOpen').addEventListener('click', () => $('#moreSheet').showModal());
+$('#inputOpen').addEventListener('click', async () => {
+  const list = $('#inputList');
+  list.replaceChildren(emptyItem('Henter innganger …'));
+  $('#inputSheet').showModal();
+  try {
+    const { inputs } = await api('inputs');
+    list.replaceChildren(...(inputs.length ? inputs.map(inputRow) : [emptyItem('Fant ingen innganger på TV-en.')]));
+  } catch (error) {
+    list.replaceChildren(emptyItem(error.message));
+  }
+});
+
+function inputRow(input) {
+  const li = document.createElement('li');
+  li.className = 'app-row';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'app-open';
+  if (!input.connected) button.classList.add('is-disconnected');
+  const icon = document.createElement('span');
+  icon.className = 'app-icon s all';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.append(svgIcon('hdmi'));
+  const name = document.createElement('span');
+  name.textContent = input.connected ? input.name : `${input.name} (ikke tilkoblet)`;
+  button.append(icon, name);
+  button.addEventListener('click', async () => {
+    try {
+      await api('input', { id: input.id });
+      $('#inputSheet').close();
+      toast(`Bytter til ${input.name}.`);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  li.append(button);
+  return li;
+}
 
 $('#powerOpen').addEventListener('click', openPower);
 $('#powerOff').addEventListener('click', () => {
@@ -631,12 +710,17 @@ $('#powerOn').addEventListener('click', async () => {
   }
 });
 
-const KEYBOARD = { ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Select', Backspace: 'Back', '+': 'VolumeUp', '-': 'VolumeDown', m: 'Mute' };
+const KEYBOARD = {
+  ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Select', Backspace: 'Back',
+  '+': 'VolumeUp', '-': 'VolumeDown', m: 'Mute',
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, n) => [String(n), `Num${n}`])),
+};
 document.addEventListener('keydown', (event) => {
   if (document.querySelector('dialog[open]') || event.target.closest('input, textarea, select')) return;
   // Enter på en fokusert knapp skal trykke den knappen, ikke sende OK til TV-en.
   if (event.key === 'Enter' && event.target.closest('button, summary')) return;
   const key = KEYBOARD[event.key];
+  if (key?.startsWith('Num') && !supports(state.capabilities, key)) return;
   if (key && state.device) {
     event.preventDefault();
     send(key, document.querySelector(`[data-key="${key}"]:not([hidden])`));

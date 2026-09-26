@@ -30,7 +30,9 @@ class BridgeLogicTest {
     }
 
     @Test fun `alle kommandoer har en Roku-tast, og pause veksler`() {
-        Validate.COMMANDS.forEach { assertTrue(it, Roku.KEYS.containsKey(it)) }
+        // Hver kommando støttes av minst én TV-type (fargetaster finnes f.eks. bare på LG).
+        val lg = LgSession.BUTTONS.keys + LgSession.REQUESTS.keys + setOf("Mute", "PowerOn")
+        Validate.COMMANDS.forEach { assertTrue(it, Roku.KEYS.containsKey(it) || it in lg) }
         assertEquals("Rev", Roku.KEYS["Rewind"])
         assertEquals("Fwd", Roku.KEYS["FastForward"])
         assertEquals("Play", Roku.KEYS["Pause"])
@@ -125,6 +127,25 @@ class BridgeLogicTest {
         assertFalse(Roku.parseApps("""<app id="12" type="appl">Netflix</app>""")[0].system)
         assertEquals("Roku", Roku.parseDeviceInfo("192.168.1.9", "<device-info/>").name)
         assertEquals("LG-TV", Ssdp.classify("webos", "192.168.0.3")?.name)
+    }
+
+    @Test fun `full fjernkontroll - tastene finnes for riktig TV-type`() {
+        (LgSession.EXTRA_KEYS + Roku.EXTRA_KEYS).forEach { assertTrue(it, Validate.COMMANDS.contains(it)) }
+        LgSession.EXTRA_KEYS.forEach { assertTrue(it, LgSession.BUTTONS.containsKey(it) || LgSession.REQUESTS.containsKey(it)) }
+        Roku.EXTRA_KEYS.forEach { assertTrue(it, Roku.KEYS.containsKey(it)) }
+        assertEquals("PROGRAM", LgSession.BUTTONS["Guide"])
+        assertEquals("MENU", LgSession.BUTTONS["Settings"])
+        assertEquals("7", LgSession.BUTTONS["Num7"])
+        assertEquals("Lit_7", Roku.KEYS["Num7"])
+        assertFalse(Roku.KEYS.containsKey("Red"))
+    }
+
+    @Test fun `YouTube-søk koder søket trygt`() {
+        assertEquals("https://www.youtube.com/tv#/search?q=lofi%20hip%20hop", LgSession.youtubeSearchTarget("lofi hip hop"))
+        assertEquals("https://www.youtube.com/tv#/search?q=a%26b%3Dc", LgSession.youtubeSearchTarget("a&b=c"))
+        assertEquals("lofi", Validate.query("  lofi  "))
+        assertThrows { Validate.query("   ") }
+        assertThrows { Validate.inputId("../x") }
     }
 
     @Test fun `feilsøkingsloggen har tak`() {

@@ -14,8 +14,23 @@ object Roku {
         "Back" to "Back", "Home" to "Home", "VolumeUp" to "VolumeUp", "VolumeDown" to "VolumeDown",
         "Mute" to "VolumeMute", "PowerOff" to "PowerOff", "PowerOn" to "PowerOn",
         "Play" to "Play", "Pause" to "Play", "Rewind" to "Rev", "FastForward" to "Fwd",
-        "ChannelUp" to "ChannelUp", "ChannelDown" to "ChannelDown", "Backspace" to "Backspace",
-    )
+        "ChannelUp" to "ChannelUp", "ChannelDown" to "ChannelDown", "Backspace" to "Backspace", "Enter" to "Enter",
+        "Info" to "Info", "Search" to "Search", "Replay" to "InstantReplay",
+    ) + (0..9).associate { "Num$it" to "Lit_$it" }
+    val EXTRA_KEYS = (0..9).map { "Num$it" } + listOf("Info", "Search", "Replay", "Enter")
+    /** YouTube-kanalen på Roku. */
+    const val YOUTUBE_ID = "837"
+
+    /** ECP-søk som åpner YouTube med søkeordet (launch=true). */
+    fun search(host: String, query: String) {
+        val keyword = URLEncoder.encode(query, "UTF-8").replace("+", "%20")
+        val connection = open(host, "/search/browse?keyword=$keyword&provider-id=$YOUTUBE_ID&launch=true", "POST", 4000)
+        try {
+            if (connection.responseCode !in 200..299) throw UserError("Roku kunne ikke søke.", 502)
+        } finally {
+            connection.disconnect()
+        }
+    }
     const val MAX_RESPONSE_BYTES = 64 * 1024
 
     private fun open(host: String, path: String, method: String, timeoutMs: Int): HttpURLConnection {

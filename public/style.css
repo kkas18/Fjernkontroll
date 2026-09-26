@@ -132,11 +132,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .notice[data-tone="err"] { border-left-color: var(--err); }
 
 /* Fjernkontrollen: skyves ned mot tommelen */
-.remote { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-3), 3dvh, var(--s-6)); padding-top: var(--s-3); }
-.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
-.row.transport { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
-/* Avspilling er sekundært: lavere og roligere enn tastene over. */
-.row.transport .key { min-height: 48px; background: var(--surface); box-shadow: none; }
+.remote { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-3), 2.2dvh, var(--s-5)); padding-top: var(--s-3); }
 
 /* Favoritter står fast rett over kontrollene, med ekte ikoner fra TV-en */
 .apps { flex: 0 0 auto; margin-top: auto; display: flex; flex-direction: column; gap: var(--s-2); }
@@ -201,27 +197,62 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .app-star[aria-pressed="true"] { color: var(--accent); }
 .app-star[aria-pressed="true"] use { fill: currentColor; }
 
-.key, .rocker button, .dir, .ok {
+.segmented-bar button, .rocker button, .dir, .ok {
   transition-property: transform, background-color, box-shadow, color;
   transition-duration: var(--press);
   transition-timing-function: ease-out;
 }
-.key {
-  min-height: clamp(52px, 8dvh, 72px);
+/* Snarveier: Kilde, 123, Innstillinger, Mer */
+.shortcuts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s-2); }
+.shortcut {
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: var(--r-m);
+  background: var(--surface);
+  color: var(--text);
+  transition-property: transform, background-color;
+  transition-duration: var(--press);
+}
+.shortcut span { max-width: 100%; font-size: var(--t-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 var(--s-1); }
+.shortcut .icon { width: 22px; height: 22px; }
+.shortcut:active { transform: scale(0.96); background: var(--raised); }
+
+/* Sammenhengende knappegrupper, som på en fysisk fjernkontroll */
+.segmented-bar {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  border-radius: var(--r-m);
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  box-shadow: var(--bevel);
+  overflow: hidden;
+}
+.segmented-bar button {
+  min-height: clamp(52px, 7.5dvh, 64px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  border-radius: var(--r-m);
-  background: var(--raised);
-  border: 1px solid var(--edge);
-  box-shadow: var(--bevel);
+  border: 0;
+  border-left: 1px solid rgb(255 255 255 / 0.05);
+  background: none;
   font-size: var(--t-xs);
   color: var(--muted);
 }
-.key .icon { color: var(--text); }
-.key:active { transform: scale(0.96); background: var(--raised-hi); }
+.segmented-bar button:first-child { border-left: 0; }
+.segmented-bar button .icon { color: var(--text); }
+.segmented-bar button:active { background: var(--raised-hi); }
+/* Avspilling er sekundært: lavere og roligere */
+.segmented-bar.transport { background: var(--surface); box-shadow: none; }
+.segmented-bar.transport button { min-height: 48px; }
 
 .cluster { display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; gap: var(--s-2); }
 
@@ -414,3 +445,72 @@ form .button { width: 100%; margin-top: var(--s-5); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* Taster: tall og fargetaster */
+.color-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); margin-bottom: var(--s-3); }
+.color {
+  height: 40px;
+  border: 0;
+  border-radius: var(--r-full);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 1px 2px rgb(0 0 0 / 0.4);
+  transition-property: transform, filter;
+  transition-duration: var(--press);
+}
+.color:active { transform: scale(0.95); filter: brightness(1.15); }
+.color.red { background: #e5484d; }
+.color.green { background: #30a46c; }
+.color.yellow { background: #f0c233; }
+.color.blue { background: #3e6fd8; }
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.num {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-1);
+  border: 0;
+  border-radius: var(--r-m);
+  background: var(--raised);
+  box-shadow: var(--bevel);
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition-property: transform, background-color, box-shadow;
+  transition-duration: var(--press);
+}
+.num.small { font-size: var(--t-s); color: var(--muted); }
+.num.small .icon { width: 20px; height: 20px; color: var(--text); }
+.num:active { transform: scale(0.96); background: var(--raised-hi); }
+.num.is-unavailable { visibility: hidden; }
+
+/* Mer: sjeldnere taster i et rutenett */
+.more-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.more-key {
+  min-height: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--s-2);
+  border: 0;
+  border-radius: var(--r-m);
+  background: var(--raised);
+  box-shadow: var(--bevel);
+  font-size: var(--t-xs);
+  color: var(--muted);
+  text-align: center;
+  transition-property: transform, background-color, box-shadow;
+  transition-duration: var(--press);
+}
+.more-key .icon { color: var(--text); }
+.more-key:active { transform: scale(0.96); background: var(--raised-hi); }
+
+/* Skriv og søk */
+.field.large { min-height: 56px; font-size: var(--t-l); }
+#textForm .search-action { margin-top: var(--s-3); }
+.text-actions { display: grid; grid-template-columns: 1fr auto auto; gap: var(--s-2); margin-top: var(--s-2); }
+#textForm .text-actions .button { width: auto; margin-top: 0; }
+.button.icon-only { width: 56px !important; padding: 0; }
+.app-open.is-disconnected { color: var(--muted); }
+

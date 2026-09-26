@@ -87,7 +87,22 @@ class LgSession(
             if (stored?.key != null && stored.rev == MANIFEST_REVISION) payload.put("client-key", stored.key)
             return payload
         }
-        val BUTTONS = mapOf("Up" to "UP", "Down" to "DOWN", "Left" to "LEFT", "Right" to "RIGHT", "Select" to "ENTER", "Back" to "BACK", "Home" to "HOME")
+        // Knappenavn for pekersocketen (samme liste som LG-fjernkontrollen; se homebridge-webos-tv).
+        val BUTTONS = mapOf(
+            "Up" to "UP", "Down" to "DOWN", "Left" to "LEFT", "Right" to "RIGHT", "Select" to "ENTER", "Back" to "BACK", "Home" to "HOME",
+            "Red" to "RED", "Green" to "GREEN", "Yellow" to "YELLOW", "Blue" to "BLUE",
+            "Info" to "INFO", "Guide" to "PROGRAM", "List" to "LIST", "Dash" to "DASH", "Exit" to "EXIT", "Settings" to "MENU",
+            "Subtitles" to "CC", "Teletext" to "TELETEXT", "Aspect" to "ASPECT_RATIO", "Recent" to "RECENT",
+        ) + (0..9).associate { "Num$it" to "$it" }
+        val EXTRA_KEYS = (0..9).map { "Num$it" } + listOf(
+            "Red", "Green", "Yellow", "Blue", "Info", "Guide", "List", "Dash", "Exit", "Settings",
+            "Subtitles", "Teletext", "Aspect", "Recent", "Enter",
+        )
+        const val YOUTUBE_APP_ID = "youtube.leanback.v4"
+
+        /** YouTube på TV åpner søket direkte med denne adressen som contentTarget. */
+        fun youtubeSearchTarget(query: String) =
+            "https://www.youtube.com/tv#/search?q=" + java.net.URLEncoder.encode(query, "UTF-8").replace("+", "%20")
         val REQUESTS: Map<String, Pair<String, JSONObject?>> = mapOf(
             "VolumeUp" to ("ssap://audio/volumeUp" to null),
             "VolumeDown" to ("ssap://audio/volumeDown" to null),
@@ -99,6 +114,7 @@ class LgSession(
             "ChannelUp" to ("ssap://tv/channelUp" to null),
             "ChannelDown" to ("ssap://tv/channelDown" to null),
             "Backspace" to ("ssap://com.webos.service.ime/deleteCharacters" to JSONObject().put("count", 1)),
+            "Enter" to ("ssap://com.webos.service.ime/sendEnterKey" to null),
         )
 
         fun fingerprint(cert: X509Certificate): String =
@@ -556,6 +572,38 @@ class LgSession(
         if (!ready) throw UserError(status, 409)
         if (apps.none { it.id == id }) throw UserError("Ukjent app.", 404)
         request("ssap://system.launcher/launch", JSONObject().put("id", id))
+        Unit
+    }
+
+    private var inputList: List<Input> = emptyList()
+
+    suspend fun inputs(): List<Input> = withContext(state) {
+        if (!ready) throw UserError(status, 409)
+        val devices = request("ssap://tv/getExternalInputList")?.optJSONArray("devices") ?: JSONArray()
+        val list = mutableListOf<Input>()
+        for (i in 0 until devices.length()) {
+            val device = devices.optJSONObject(i) ?: continue
+            val id = runCatching { Validate.inputId(device.optString("id")) }.getOrNull() ?: continue
+            list += Input(id, device.optString("label").ifEmpty { id }.take(60), device.optBoolean("connected", true))
+            if (list.size >= 24) break
+        }
+        inputList = list
+        list
+    }
+
+    suspend fun switchInput(id: String) = withContext(state) {
+        if (!ready) throw UserError(status, 409)
+        if (inputList.none { it.id == id }) throw UserError("Ukjent inngang.", 404)
+        request("ssap://tv/switchInput", JSONObject().put("inputId", id))
+        Unit
+    }
+
+    /** Åpner YouTube med søket ferdig utfylt. Virker uansett hva som vises på TV-en. */
+    suspend fun youtubeSearch(query: String) = withContext(state) {
+        if (!ready) throw UserError(status, 409)
+        val id = apps.firstOrNull { it.id.contains("youtube", ignoreCase = true) }?.id ?: YOUTUBE_APP_ID
+        log("LG: YouTube-søk via $id")
+        request("ssap://system.launcher/launch", JSONObject().put("id", id).put("params", JSONObject().put("contentTarget", youtubeSearchTarget(query))))
         Unit
     }
 

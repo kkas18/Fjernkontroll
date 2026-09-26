@@ -19,6 +19,9 @@ const fakeLg = {
   async text(value) { calls.push(['lg-text', value]); },
   model: null,
   async apps() { return [{ id: 'netflix', name: 'Netflix', system: false, color: null }]; },
+  async inputs() { return [{ id: 'HDMI_1', name: 'HDMI 1', connected: true }]; },
+  async switchInput(id) { calls.push(['lg-input', id]); },
+  async youtubeSearch(query) { calls.push(['lg-search', query]); },
   iconUrl(id) { return id === 'netflix' ? `http://127.0.0.1:${iconPort}/netflix.png` : null; },
   async launch(id) { if (id !== 'netflix') throw new UserError('Ukjent app.', 404); calls.push(['lg-launch', id]); },
   async forget(host) { calls.push(['lg-forget', host]); },
@@ -118,7 +121,12 @@ test('Roku: capabilities, ECP-taster, tekst og helsesjekk', async () => {
   assert.equal(connect.status, 200);
   assert.deepEqual(connect.json.device, { type: 'roku', host: '192.168.1.5', name: 'Roku Stue' });
   assert.equal(connect.json.ready, true);
-  assert.deepEqual(connect.json.capabilities, { playPause: 'toggle', channels: false, powerOn: false, apps: true });
+  assert.equal(connect.json.capabilities.playPause, 'toggle');
+  assert.equal(connect.json.capabilities.channels, false);
+  assert.equal(connect.json.capabilities.powerOn, false);
+  assert.equal(connect.json.capabilities.search, 'youtube');
+  assert.ok(connect.json.capabilities.keys.includes('Num1'));
+  assert.ok(!connect.json.capabilities.keys.includes('Red'), 'Roku har ikke fargetaster');
 
   calls.length = 0;
   assert.equal((await post('/api/command', { key: 'FastForward' })).status, 200);
@@ -156,7 +164,9 @@ test('LG: kobler til, capabilities, feil, slå på, apper og ny paring', async (
   const connect = await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42', name: 'Stue' } });
   assert.deepEqual(connect.json.device, { type: 'lg', host: '192.168.1.42', name: 'Stue' });
   assert.equal(connect.json.ready, true);
-  assert.deepEqual(connect.json.capabilities, { playPause: 'separate', channels: true, powerOn: false, apps: true });
+  assert.equal(connect.json.capabilities.playPause, 'separate');
+  assert.equal(connect.json.capabilities.inputs, true);
+  for (const key of ['Num0', 'Red', 'Blue', 'Guide', 'Settings', 'Info']) assert.ok(connect.json.capabilities.keys.includes(key), key);
   assert.equal((await post('/api/command', { key: 'Up' })).status, 200);
 
   const power = await post('/api/command', { key: 'PowerOff' });
@@ -213,6 +223,23 @@ test('LG: modellnavnet erstatter standardnavnet, men ikke et eget navn', async (
   assert.equal((await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42', name: 'LG webOS · 192.168.1.42' } })).json.device.name, 'LG OLED55C14LB');
   assert.equal((await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42', name: 'Soverom' } })).json.device.name, 'Soverom');
   fakeLg.model = null;
+});
+
+test('søk og innganger', async () => {
+  await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42' } });
+  calls.length = 0;
+  assert.equal((await post('/api/search', { query: '  lofi  ' })).status, 200);
+  assert.deepEqual(calls.at(-1), ['lg-search', 'lofi']);
+  assert.equal((await post('/api/search', { query: '   ' })).status, 400);
+  assert.deepEqual((await request('/api/inputs')).json.inputs, [{ id: 'HDMI_1', name: 'HDMI 1', connected: true }]);
+  assert.equal((await post('/api/input', { id: 'HDMI_1' })).status, 200);
+  assert.equal((await post('/api/input', { id: '../x' })).status, 400);
+  assert.equal((await post('/api/command', { key: 'Guide' })).status, 200);
+
+  await post('/api/connect', { device: { type: 'roku', host: '192.168.1.5' } });
+  calls.length = 0;
+  assert.equal((await post('/api/search', { query: 'katter' })).status, 200);
+  assert.match(calls.at(-1)[2], /\/search\/browse\?keyword=katter&provider-id=837&launch=true$/);
 });
 
 test('lokale IP-er er påkrevd', async () => {

@@ -5,11 +5,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { UserError, toUserMessage } from './lib/errors.mjs';
-import { validAppId, validCommand, validDevice, validText } from './lib/validate.mjs';
-import { rokuApps, rokuCommand, rokuIcon, rokuLaunch, rokuProbe, rokuText } from './lib/roku.mjs';
+import { validAppId, validCommand, validDevice, validInputId, validQuery, validText } from './lib/validate.mjs';
+import { ROKU_EXTRA_KEYS, rokuApps, rokuCommand, rokuIcon, rokuLaunch, rokuProbe, rokuSearch, rokuText } from './lib/roku.mjs';
 import { createIconCache, fetchBytes, sniffImage } from './lib/icons.mjs';
 import { createDiscovery } from './lib/ssdp.mjs';
-import { createKeyStore, createLgSession } from './lib/lg.mjs';
+import { LG_EXTRA_KEYS, createKeyStore, createLgSession } from './lib/lg.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
@@ -144,9 +144,12 @@ export function createBridge({
   // Hva grensesnittet skal vise for valgt TV.
   function capabilities() {
     if (selected.type === 'roku') {
-      return { playPause: 'toggle', channels: selected.isTv !== false, powerOn: selected.isTv === true, apps: true };
+      return {
+        playPause: 'toggle', channels: selected.isTv !== false, powerOn: selected.isTv === true, apps: true,
+        inputs: selected.isTv !== false, search: 'youtube', keys: [...ROKU_EXTRA_KEYS],
+      };
     }
-    return { playPause: 'separate', channels: true, powerOn: lg.canWake, apps: true };
+    return { playPause: 'separate', channels: true, powerOn: lg.canWake, apps: true, inputs: true, search: 'youtube', keys: [...LG_EXTRA_KEYS] };
   }
 
   async function status() {
@@ -183,6 +186,14 @@ export function createBridge({
       const { type, bytes } = await icon(id);
       res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': type, 'content-length': bytes.length, 'cache-control': 'private, max-age=86400' });
       return res.end(bytes);
+    }
+    if (route === '/api/inputs') {
+      if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
+      if (!selected) throw new UserError('Velg en TV først.', 409);
+      if (selected.type === 'lg') return sendJson(res, 200, { inputs: await lg.inputs() });
+      // Roku: innganger er «apper» av typen tvin (HDMI, antenne).
+      if (!rokuAppList.length) rokuAppList = await withRoku(() => rokuApps(selected.host, { fetchImpl }));
+      return sendJson(res, 200, { inputs: rokuAppList.filter((app) => app.id.startsWith('tvinput.')).map(({ id, name }) => ({ id, name, connected: true })) });
     }
     if (route === '/api/status' || route === '/api/apps' || route === '/api/diagnostics') {
       if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
@@ -222,6 +233,23 @@ export function createBridge({
         await lg.forget(selected.host);
         await lg.connect(selected.host);
         return sendJson(res, 200, await status());
+      }
+      case '/api/input': {
+        if (!selected) throw new UserError('Velg en TV først.', 409);
+        const id = validInputId(input.id);
+        if (selected.type === 'lg') await lg.switchInput(id);
+        else {
+          if (!rokuAppList.some((app) => app.id === id && id.startsWith('tvinput.'))) throw new UserError('Ukjent inngang.', 404);
+          await withRoku(() => rokuLaunch(selected.host, id, { fetchImpl }));
+        }
+        return sendJson(res, 200, { ok: true });
+      }
+      case '/api/search': {
+        if (!selected) throw new UserError('Velg en TV først.', 409);
+        const query = validQuery(input.query);
+        if (selected.type === 'lg') await lg.youtubeSearch(query);
+        else await withRoku(() => rokuSearch(selected.host, query, { fetchImpl }));
+        return sendJson(res, 200, { ok: true });
       }
       case '/api/launch': {
         if (!selected) throw new UserError('Velg en TV først.', 409);

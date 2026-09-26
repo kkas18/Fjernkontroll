@@ -6,8 +6,13 @@ object Validate {
         "Up", "Down", "Left", "Right", "Select", "Back", "Home",
         "VolumeUp", "VolumeDown", "Mute", "PowerOff",
         "Play", "Pause", "Rewind", "FastForward", "ChannelUp", "ChannelDown",
-        "PowerOn", "Backspace",
+        "PowerOn", "Backspace", "Enter",
+        "Num0", "Num1", "Num2", "Num3", "Num4", "Num5", "Num6", "Num7", "Num8", "Num9",
+        "Red", "Green", "Yellow", "Blue",
+        "Info", "Guide", "List", "Dash", "Exit", "Settings", "Subtitles", "Teletext", "Aspect", "Recent",
+        "Search", "Replay",
     )
+    const val MAX_QUERY_LENGTH = 100
     const val MAX_TEXT_LENGTH = 140
     const val MAX_APPS = 48
     private val IPV4 = Regex("""^\d{1,3}(\.\d{1,3}){3}$""")
@@ -42,6 +47,17 @@ object Validate {
         return text
     }
 
+    fun query(value: String?): String {
+        val query = value.orEmpty().trim().take(MAX_QUERY_LENGTH)
+        if (query.isEmpty()) throw UserError("Skriv hva du vil søke etter.")
+        return query
+    }
+
+    fun inputId(id: String?): String {
+        if (id == null || !APP_ID.matches(id)) throw UserError("Ukjent inngang.")
+        return id
+    }
+
     fun appId(id: String?): String {
         if (id == null || !APP_ID.matches(id)) throw UserError("Ukjent app.")
         return id
@@ -49,6 +65,8 @@ object Validate {
 }
 
 data class Device(val type: String, val host: String, val name: String, val isTv: Boolean? = null)
+
+data class Input(val id: String, val name: String, val connected: Boolean = true)
 
 data class App(
     val id: String,

@@ -79,8 +79,10 @@ class Bridge(
 
     private fun capabilities(device: Device) = if (device.type == "roku") {
         JSONObject().put("playPause", "toggle").put("channels", device.isTv != false).put("powerOn", device.isTv == true).put("apps", true)
+            .put("inputs", device.isTv != false).put("search", "youtube").put("keys", JSONArray(Roku.EXTRA_KEYS))
     } else {
         JSONObject().put("playPause", "separate").put("channels", true).put("powerOn", lg.canWake).put("apps", true)
+            .put("inputs", true).put("search", "youtube").put("keys", JSONArray(LgSession.EXTRA_KEYS))
     }
 
     private suspend fun status(): JSONObject {
@@ -135,6 +137,19 @@ class Bridge(
 
     private suspend fun dispatchLocked(route: String, input: JSONObject?): JSONObject {
         if (route == "status") return status()
+        if (route == "inputs") {
+            val device = selected ?: throw UserError("Velg en TV først.", 409)
+            val inputs = if (device.type == "lg") {
+                lg.inputs()
+            } else {
+                // Roku: innganger er «apper» av typen tvin (HDMI, antenne).
+                if (rokuApps.isEmpty()) rokuApps = withRoku { Roku.apps(device.host) }
+                rokuApps.filter { it.id.startsWith("tvinput.") }.map { Input(it.id, it.name) }
+            }
+            return JSONObject().put("inputs", JSONArray().also { array ->
+                inputs.forEach { array.put(JSONObject().put("id", it.id).put("name", it.name).put("connected", it.connected)) }
+            })
+        }
         if (route == "apps") {
             val device = selected ?: throw UserError("Velg en TV først.", 409)
             val apps = if (device.type == "lg") lg.apps() else withRoku { Roku.apps(device.host) }.also { rokuApps = it }
@@ -163,6 +178,22 @@ class Bridge(
                 withContext(Dispatchers.IO) { lg.forget(device.host) }
                 lg.connect(device.host)
                 status()
+            }
+            "input" -> {
+                val device = selected ?: throw UserError("Velg en TV først.", 409)
+                val id = Validate.inputId(body.optString("id"))
+                if (device.type == "lg") lg.switchInput(id)
+                else {
+                    if (rokuApps.none { it.id == id && id.startsWith("tvinput.") }) throw UserError("Ukjent inngang.", 404)
+                    withRoku { Roku.launch(device.host, id) }
+                }
+                JSONObject().put("ok", true)
+            }
+            "search" -> {
+                val device = selected ?: throw UserError("Velg en TV først.", 409)
+                val query = Validate.query(body.optString("query"))
+                if (device.type == "lg") lg.youtubeSearch(query) else withRoku { Roku.search(device.host, query) }
+                JSONObject().put("ok", true)
             }
             "launch" -> {
                 val device = selected ?: throw UserError("Velg en TV først.", 409)
