@@ -5,8 +5,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { UserError, toUserMessage } from './lib/errors.mjs';
-import { validCommand, validDevice, validText } from './lib/validate.mjs';
-import { rokuCommand, rokuProbe, rokuText } from './lib/roku.mjs';
+import { validAppId, validCommand, validDevice, validText } from './lib/validate.mjs';
+import { rokuApps, rokuCommand, rokuLaunch, rokuProbe, rokuText } from './lib/roku.mjs';
 import { createDiscovery } from './lib/ssdp.mjs';
 import { createKeyStore, createLgSession } from './lib/lg.mjs';
 
@@ -25,7 +25,7 @@ const MEDIA = new Map([
 
 export const SECURITY_HEADERS = Object.freeze({
   'content-security-policy': [
-    "default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:",
+    "default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self'",
     "connect-src 'self'", "manifest-src 'self'", "worker-src 'self'", "object-src 'none'",
     "base-uri 'none'", "frame-ancestors 'none'", "form-action 'self'",
   ].join('; '),
@@ -63,21 +63,74 @@ export function createBridge({
   dataDir = path.join(root, 'data'),
   log = (message) => console.log(message),
   fetchImpl = fetch,
-  lg = createLgSession({ keyStore: createKeyStore(path.join(dataDir, 'lg-keys.json')), log }),
+  keyStore = createKeyStore(path.join(dataDir, 'lg-keys.json')),
+  lg = createLgSession({ keyStore, log }),
   discover = createDiscovery({ log, probeRoku: (host) => rokuProbe(host, { fetchImpl }) }),
+  rokuHealthTtl = 10_000,
 } = {}) {
   let selected = null;
+  let rokuHealth = { host: null, ok: false, at: 0 };
+  let rokuAppList = [];
+  keyStore.protect?.();
 
-  function status() {
+  const publicDevice = (device) => device && { type: device.type, host: device.host, name: device.name };
+
+  // Roku har ingen varig forbindelse, så vi spør TV-en jevnlig (bufret) om den svarer.
+  async function rokuReachable() {
+    const fresh = rokuHealth.host === selected.host && Date.now() - rokuHealth.at < rokuHealthTtl;
+    if (fresh) return rokuHealth.ok;
+    let ok = false;
+    try {
+      await rokuProbe(selected.host, { fetchImpl, timeout: 1500 });
+      ok = true;
+    } catch { /* svarer ikke */ }
+    rokuHealth = { host: selected.host, ok, at: Date.now() };
+    return ok;
+  }
+  const markRoku = (ok) => { rokuHealth = { host: selected.host, ok, at: Date.now() }; };
+
+  // Hva grensesnittet skal vise for valgt TV.
+  function capabilities() {
+    if (selected.type === 'roku') {
+      return { playPause: 'toggle', channels: selected.isTv !== false, powerOn: selected.isTv === true, apps: true };
+    }
+    return { playPause: 'separate', channels: true, powerOn: lg.canWake, apps: true };
+  }
+
+  async function status() {
     if (!selected) return { device: null, ready: false, state: 'Ingen TV valgt.' };
-    if (selected.type === 'roku') return { device: selected, ready: true, state: 'Tilkoblet' };
-    return { device: selected, ready: lg.ready, state: lg.state };
+    if (selected.type === 'roku') {
+      const ok = await rokuReachable();
+      return {
+        device: publicDevice(selected),
+        ready: ok,
+        state: ok ? 'Tilkoblet' : 'Roku svarer ikke. Sjekk at TV-en er på og på samme Wi‑Fi.',
+        code: ok ? null : 'unreachable',
+        capabilities: capabilities(),
+      };
+    }
+    return { device: publicDevice(selected), ready: lg.ready, state: lg.state, code: lg.code, capabilities: capabilities() };
+  }
+
+  async function withRoku(action) {
+    try {
+      const result = await action();
+      markRoku(true);
+      return result;
+    } catch (error) {
+      if (!(error instanceof UserError)) markRoku(false);
+      throw error;
+    }
   }
 
   async function api(req, res, route) {
-    if (route === '/api/status') {
+    if (route === '/api/status' || route === '/api/apps') {
       if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
-      return sendJson(res, 200, status());
+      if (route === '/api/status') return sendJson(res, 200, await status());
+      if (!selected) throw new UserError('Velg en TV først.', 409);
+      const apps = selected.type === 'lg' ? await lg.apps() : await withRoku(() => rokuApps(selected.host, { fetchImpl }));
+      if (selected.type === 'roku') rokuAppList = apps;
+      return sendJson(res, 200, { apps });
     }
     if (req.method !== 'POST') throw new UserError('Metoden støttes ikke.', 405);
     const input = await readJson(req);
@@ -91,24 +144,47 @@ export function createBridge({
           const probed = await rokuProbe(device.host, { fetchImpl });
           lg.disconnect();
           selected = probed;
+          rokuAppList = [];
+          markRoku(true);
         } else {
           selected = device;
           await lg.connect(device.host);
         }
-        return sendJson(res, 200, status());
+        return sendJson(res, 200, await status());
+      }
+      case '/api/repair': {
+        // «Par på nytt» etter endret sertifikat: glem lagret nøkkel og avtrykk, og koble til.
+        if (selected?.type !== 'lg') throw new UserError('Bare LG-TV-er kan pares på nytt.', 409);
+        await lg.forget(selected.host);
+        await lg.connect(selected.host);
+        return sendJson(res, 200, await status());
+      }
+      case '/api/launch': {
+        if (!selected) throw new UserError('Velg en TV først.', 409);
+        const id = validAppId(input.id);
+        if (selected.type === 'lg') await lg.launch(id);
+        else {
+          if (!rokuAppList.some((app) => app.id === id)) throw new UserError('Ukjent app.', 404);
+          await withRoku(() => rokuLaunch(selected.host, id, { fetchImpl }));
+        }
+        return sendJson(res, 200, { ok: true });
       }
       case '/api/command': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
         const key = validCommand(input.key);
-        if (selected.type === 'lg') await lg.command(key);
-        else await rokuCommand(selected.host, key, { fetchImpl });
+        if (selected.type === 'lg') {
+          if (key === 'PowerOn') await lg.powerOn(selected.host);
+          else await lg.command(key);
+        } else {
+          await withRoku(() => rokuCommand(selected.host, key, { fetchImpl }));
+        }
         return sendJson(res, 200, { ok: true });
       }
       case '/api/text': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
         const text = validText(input.text);
         if (selected.type === 'lg') await lg.text(text);
-        else await rokuText(selected.host, text, { fetchImpl });
+        else await withRoku(() => rokuText(selected.host, text, { fetchImpl }));
         return sendJson(res, 200, { ok: true });
       }
       default:
