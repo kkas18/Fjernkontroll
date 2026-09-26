@@ -1,0 +1,17 @@
+{
+  "name": "fjern",
+  "version": "2.0.0",
+  "description": "Fjernkontroll-PWA for Roku og LG webOS med en lokal Node-bro. Ingen npm-avhengigheter.",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test",
+    "verify": "npm run check && npm test"
+  }
+}
