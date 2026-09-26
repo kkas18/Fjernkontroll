@@ -2,20 +2,30 @@
 
 **Dato:** 2026-09-26
 **Omfang:** `server.mjs`, `app.js`, `sw.js`, `index.html`, `style.css`, `manifest.webmanifest`, `README.md`, `icons/`
-**Metode:** Manuell gjennomgang av all kode, pluss kjøring av broen lokalt (Node 22) med probing av HTTP-API-et. Gjennomgangen dekker sikkerhet, korrekthet, robusthet, PWA, tilgjengelighet og drift/vedlikehold.
+**Metode:** Manuell gjennomgang av all kode, pluss kjøring av broen lokalt (Node 22) med probing av HTTP-API-et. Gjennomgangen er strukturert etter sjekklistene i pluginen [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (ECC v2.2.2):
 
-> **Om pluginen everything-claude-code:** Den var ikke tilgjengelig i denne skyøkten (ingen plugins lastet, ingen av skillsene i listen). Revisjonen følger derfor de samme fagområdene (security review, code review, PWA/frontend, docs) manuelt. Installer pluginen i miljøet ditt eller i en lokal Claude Code-økt hvis du vil kjøre skillsene direkte.
+| ECC-skill | Brukt til |
+| --- | --- |
+| `production-audit` | Klar-for-bruk-score, risikolinser (sikkerhet, drift, UX) |
+| `security-review` | Hemmeligheter, inputvalidering, CSRF, XSS/CSP, rate limiting, feillekkasje |
+| `error-handling` | Brukerrettede feilmeldinger, timeouts, gjenoppretting |
+| `frontend-a11y` | Semantikk, ARIA, tastatur og fokus |
+| `verification-loop` | Verifikasjon av funn mot kjørende kode |
+
+Pluginen er installert med prosjektomfang i `.claude/settings.json`, så skillsene lastes automatisk i nye Claude Code-økter i dette repoet.
 
 ---
 
 ## Sammendrag
 
+**Production audit (ECC): 40/100, blokkert.** Appen kan ikke startes fra en ren checkout (K1), og broen kan krasje ved nettverksfeil (K2). Scoren er uansett maks 84 fordi prosjektet mangler CI og ende-til-ende-test mot ekte TV. Når fase 1–2 er gjort, er det realistisk å komme opp i 70–80 («launchable with caveats»).
+
 | Alvorlighet | Antall | Kort |
 | --- | --- | --- |
 | 🔴 Kritisk | 2 | Appen starter ikke fra repoet (`public/` mangler). Broen kan krasje ved nettverksfeil under søk. |
 | 🟠 Høy | 3 | Roku-knappene Spol/Pause virker ikke. Nyere LG-firmware bruker `wss://:3001`. Ingen `.gitignore` for LG-nøkler. |
-| 🟡 Middels | 7 | Feilmeldinger på engelsk, polling i bakgrunnen, mute-tilstand går ut av synk, og mer. |
-| 🔵 Lav | 8 | Manifest/meta, tilgjengelighet, kodestil, mangel på tester og CI. |
+| 🟡 Middels | 9 | Feilmeldinger på engelsk, polling i bakgrunnen, mute-tilstand går ut av synk, ingen CSP, og mer. |
+| 🔵 Lav | 9 | Manifest/meta, tilgjengelighet, kodestil, mangel på tester og CI. |
 
 **Helhetsvurdering:** Arkitekturen er god og gjennomtenkt: en lokal bro på `127.0.0.1`, Host- og Origin-sjekk mot DNS-rebinding, IP-hviteliste til private nett, beskyttelse mot path traversal, begrenset størrelse på forespørsler, ingen eksterne avhengigheter, og DOM bygges med `textContent`, så det er ingen XSS. Hovedproblemene er **pakking og drift**: repoet slik det ligger kjører ikke. I tillegg finnes noen **protokollfeil** mot Roku og LG. Sikkerhetsnivået er godt for en app som bare kjører lokalt.
 
@@ -65,6 +75,8 @@ $ curl -H "Host: localhost:8799" http://127.0.0.1:8799/   →  404
 | M4 | `app.js:106` | `status()` spørres hvert 2,3 s også når appen ligger i bakgrunnen, og det tapper batteri. | Pause på `visibilitychange` og kjør `status()` umiddelbart når appen blir synlig igjen. |
 | M5 | `server.mjs:137` | Roku-tekst sendes tegn for tegn, sekvensielt, med opptil 2,6 s timeout per tegn. 140 tegn kan ta flere minutter og blokkere forespørselen. | Kortere timeout per tegn, avbryt ved første feil, og vurder en lavere grense. |
 | M6 | `server.mjs` generelt | Broen har ingen autentisering. Andre apper på samme telefon kan sende kommandoer til `127.0.0.1:8765`. Risikoen er lav, men reell på Android. | Valgfritt: token som genereres ved oppstart og settes i en `HttpOnly` SameSite-cookie når `index.html` leveres. |
+| M8 | `server.mjs:152` | Ingen sikkerhetshoder (`security-review` §5). Mangler `Content-Security-Policy`, `X-Content-Type-Options: nosniff` og `Referrer-Policy`. | Legg til `default-src 'self'; connect-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'` og de to andre hodene på alle svar. Appen bruker ingen inline-skript, så CSP-en kan være streng. |
+| M9 | `server.mjs:127`, `app.js:84` | Ingen rate limiting eller lås på `/api/scan` (`security-review` §7). Flere faner eller dobbeltklikk kan starte parallelle SSDP-søk med hver sin socket i 4,5 s. | Del ett pågående søk: gjenbruk samme `Promise` så lenge det kjører. |
 | M7 | `app.js:4` | `localStorage.setItem` er ikke pakket i try/catch. Det kan kaste unntak i privat modus eller når lagringen er full. | Pakk inn i try/catch. |
 
 ---
@@ -78,7 +90,8 @@ $ curl -H "Host: localhost:8799" http://127.0.0.1:8799/   →  404
 5. **Tastatur:** `Enter` på en fokusert knapp sender `Select` til TV-en i stedet for å trykke på knappen (`app.js:96–100`). Hopp over dette når `e.target` er en `button`.
 6. **Race:** `connect()` ved oppstart og `status()`-polling går parallelt. Status kan kort vise gammel tilstand.
 7. **Kodestil:** `server.mjs` og `app.js` er sterkt minifisert for hånd, med mange setninger per linje. Det gjør revisjon, diff og feilsøking vanskelig. Kjør Prettier eller skriv om til lesbar form.
-8. **Kvalitetssikring:** Prosjektet har ingen `package.json`, tester, lint eller CI. Minimum er `node --check` og noen enhetstester med `node:test` for `validIp`, `validDevice`, path-sjekken og API-rutingen, i en GitHub Actions-jobb.
+8. **Tilgjengelighet (`frontend-a11y`):** Dekorative symboler (`◉ ▣ ⓘ ⌂ ↶ ↗ ↻`) mangler `aria-hidden="true"` og blir lest opp av skjermleser. Aktiv fane i bunnmenyen mangler `aria-current="page"`. Statusteksten kuttes med ellipse (`max-width:55vw`), så lange feilmeldinger blir uleselige. Tekst på 10–11 px er i minste laget på mobil.
+9. **Kvalitetssikring:** Prosjektet har ingen `package.json`, tester, lint eller CI. Minimum er `node --check` og noen enhetstester med `node:test` for `validIp`, `validDevice`, path-sjekken og API-rutingen, i en GitHub Actions-jobb.
 
 ---
 
@@ -100,4 +113,4 @@ $ curl -H "Host: localhost:8799" http://127.0.0.1:8799/   →  404
 2. **Fase 2 – Robusthet:** K2, M1, M3, M7.
 3. **Fase 3 – Protokollkorrekthet:** H1 (Roku-mapping), M2, M5. Test på ekte TV.
 4. **Fase 4 – LG-kompatibilitet:** H2 (`wss://:3001`). Krever en beslutning om npm-avhengighet.
-5. **Fase 5 – Kvalitet:** Formatering, `package.json`, `node:test`, CI, pluss M4, M6 og funn på lav nivå.
+5. **Fase 5 – Kvalitet:** Formatering, `package.json`, `node:test`, CI, pluss M4, M6, M8, M9 og funn på lav nivå. ECC-skillsene `tdd-workflow` og `verification-loop` passer her.
