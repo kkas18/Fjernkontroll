@@ -77,8 +77,31 @@ export function toggleFavorite(apps, stored, id) {
   return current;
 }
 
+// Kjente apper får merkefarge og kortnavn i reserveikonet. Fargene er mørk nok til hvit tekst (minst 4,5:1).
+const BRANDS = [
+  [/^netflix/i, '#c80711', 'N'],
+  [/^youtube/i, '#d6002b', 'YT'],
+  [/^nrk/i, '#1d3f73', 'NRK'],
+  [/^tv\s?2/i, '#c3001a', 'TV2'],
+  [/^disney/i, '#1438b8', 'D+'],
+  [/^(hbo\s?)?max$|^hbo/i, '#0f2fd6', 'max'],
+  [/^prime|amazon/i, '#0b6fc0', 'PV'],
+  [/^spotify/i, '#15803d', 'S'],
+  [/^viaplay/i, '#5a1f8f', 'V'],
+  [/^apple\s?tv/i, '#2a2a2e', 'tv'],
+  [/^twitch/i, '#7432e0', 'T'],
+  [/^plex/i, '#8a5a00', 'P'],
+];
+export function brandFor(name) {
+  const text = String(name || '').trim();
+  const hit = BRANDS.find(([pattern]) => pattern.test(text));
+  return hit ? { color: hit[1], label: hit[2] } : null;
+}
+
 // Bokstavikon brukes til TV-ens eget ikon er lastet, eller hvis det mangler.
 export function initials(name) {
+  const brand = brandFor(name);
+  if (brand) return brand.label;
   const words = String(name || '?').trim().split(/\s+/);
   if (/^[A-ZÆØÅ0-9+]{2,3}$/.test(words[0])) return words[0];
   return words[0].slice(0, 1).toUpperCase();
@@ -87,6 +110,8 @@ export function initials(name) {
 const FALLBACK_COLORS = ['#3a4a6b', '#4b3a6b', '#6b3a4f', '#6b513a', '#3a6b5a', '#3a5f6b'];
 export function fallbackColor(app) {
   if (app.color) return app.color;
+  const brand = brandFor(app.name);
+  if (brand) return brand.color;
   let hash = 0;
   for (const char of String(app.id)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return FALLBACK_COLORS[hash % FALLBACK_COLORS.length];

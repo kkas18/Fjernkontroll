@@ -14,6 +14,7 @@
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+  <link rel="preload" href="/fonts/manrope-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/style.css">
   <title>Fjern</title>
 </head>
@@ -31,6 +32,8 @@
     <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z"/><path d="m16 9.5 5 5m0-5-5 5"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-caret-up" viewBox="0 0 24 24"><path d="M6.5 15 12 8.5l5.5 6.5h-11Z" fill="currentColor"/></symbol>
+    <symbol id="i-caret-down" viewBox="0 0 24 24"><path d="M6.5 9 12 15.5 17.5 9h-11Z" fill="currentColor"/></symbol>
     <symbol id="i-rewind" viewBox="0 0 24 24"><path d="M11 7 5 12l6 5V7Z"/><path d="M19 7l-6 5 6 5V7Z"/></symbol>
     <symbol id="i-forward" viewBox="0 0 24 24"><path d="m13 7 6 5-6 5V7Z"/><path d="m5 7 6 5-6 5V7Z"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5L8 5.5Z"/></symbol>
@@ -67,12 +70,11 @@
     <header class="bar">
       <button id="deviceButton" class="device" type="button" aria-haspopup="dialog" aria-controls="devicesSheet">
         <span id="led" class="led" aria-hidden="true"></span>
-        <span class="device-text"><span id="deviceName" class="device-name">Ingen TV</span><span id="deviceMeta" class="device-meta mono" hidden></span></span>
+        <span class="device-text"><span id="deviceName" class="device-name">Ingen TV</span><span id="deviceMeta" class="device-meta" hidden></span></span>
         <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>
       </button>
       <div class="bar-actions">
-        <button id="textOpen" class="icon-button" type="button" aria-label="Skriv på TV"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
-        <button id="powerOpen" class="icon-button" type="button" aria-label="Strøm"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg></button>
+        <button id="powerOpen" class="icon-button power" type="button" aria-label="Strøm"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg></button>
       </div>
     </header>
 
@@ -87,6 +89,7 @@
         <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span>Søk på YouTube</span>
         <span id="searchPillMic" class="search-pill-mic" hidden><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg></span>
       </button>
+      <div id="homeRecent" class="home-recent" role="group" aria-label="Siste søk på YouTube" hidden></div>
       <div id="nowHome" class="nowbar" hidden></div>
     </div>
 
@@ -96,23 +99,17 @@
         <div id="appGrid" class="fav-grid"></div>
       </section>
 
-      <nav class="shortcuts" aria-label="Snarveier">
-        <button id="inputOpen" class="shortcut" type="button" data-cap="inputs"><svg class="icon" aria-hidden="true"><use href="#i-input"/></svg><span>Kilde</span></button>
-        <button id="numOpen" class="shortcut" type="button" data-cap="Num1"><svg class="icon" aria-hidden="true"><use href="#i-numpad"/></svg><span>123</span></button>
-        <button class="shortcut" type="button" data-key="Settings" data-cap="Settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>Oppsett</span></button>
-        <button id="moreOpen" class="shortcut" type="button"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span>Mer</span></button>
+      <nav class="toolbar" aria-label="Snarveier">
+        <button id="inputOpen" class="tool" type="button" data-cap="inputs"><svg class="icon" aria-hidden="true"><use href="#i-input"/></svg><span>Kilde</span></button>
+        <button id="numOpen" class="tool" type="button" data-cap="Num1"><svg class="icon" aria-hidden="true"><use href="#i-numpad"/></svg><span>123</span></button>
+        <button class="tool" type="button" data-key="Settings" data-cap="Settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>Oppsett</span></button>
+        <button id="moreOpen" class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span>Mer</span></button>
       </nav>
-
-      <div class="segmented-bar" role="group" aria-label="Meny">
-        <button type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
-        <button type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
-        <button type="button" data-key="Mute"><svg class="icon" aria-hidden="true"><use href="#i-mute"/></svg><span>Lyd av</span></button>
-      </div>
 
       <div class="cluster">
         <div class="rocker" role="group" aria-label="Volum">
           <button type="button" data-key="VolumeUp" data-repeat aria-label="Volum opp"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
-          <span class="rocker-label" aria-hidden="true">Vol</span>
+          <span class="rocker-label" aria-hidden="true">VOL</span>
           <button type="button" data-key="VolumeDown" data-repeat aria-label="Volum ned"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
         </div>
 
@@ -125,10 +122,16 @@
         </div>
 
         <div id="channelRocker" class="rocker" role="group" aria-label="Kanal">
-          <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
-          <span class="rocker-label" aria-hidden="true">Kanal</span>
-          <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+          <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-up"/></svg></button>
+          <span class="rocker-label" aria-hidden="true">CH</span>
+          <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-down"/></svg></button>
         </div>
+      </div>
+
+      <div class="segmented-bar" role="group" aria-label="Meny">
+        <button type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
+        <button type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
+        <button type="button" data-key="Mute"><svg class="icon" aria-hidden="true"><use href="#i-mute"/></svg><span>Lyd av</span></button>
       </div>
 
       <div class="segmented-bar transport" role="group" aria-label="Avspilling">
@@ -270,6 +273,7 @@
       <button class="icon-button" type="button" data-close="moreSheet" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
     <div class="more-grid">
+      <button id="textOpen" type="button" class="more-key"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg><span>Skriv på TV</span></button>
       <button type="button" class="more-key" data-key="Info" data-cap="Info"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span>Info</span></button>
       <button type="button" class="more-key" data-key="Guide" data-cap="Guide"><svg class="icon" aria-hidden="true"><use href="#i-guide"/></svg><span>Programguide</span></button>
       <button type="button" class="more-key" data-key="List" data-cap="List"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg><span>Kanalliste</span></button>

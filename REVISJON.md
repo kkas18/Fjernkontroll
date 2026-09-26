@@ -183,3 +183,55 @@ Knapper TV-en ikke har, skjules automatisk ut fra `capabilities.keys`, som broen
 | Forside | YouTube | Spilles nå |
 | --- | --- | --- |
 | ![](docs/revisjon/runde7/01-forside.png) | ![](docs/revisjon/runde7/03-youtube-resultater.png) | ![](docs/revisjon/runde7/04-forside-spilles-na.png) |
+
+---
+
+## Runde 8 (v2.8.0): Designrevisjon – hierarki, trykkflater og finish
+
+**Utløser:** Designrevisjon av `public/` (index.html, style.css, app.js). Skår før: **7 / 10**. Brukeren godkjente planen og ba om at alle forslagene ble bygget.
+
+**Metode:** Designprinsippene fra `frontend-design` / `design-superpowers` (hierarki, tokens, tilstander, trykkflater, rytme, identitet), anvendt manuelt fordi ECC-pluginen ikke var installert i økten. Alt er målt i Chromium med falske API-svar på 320×568, 360×640, 390×844 og 412×915.
+
+### Funn og utbedring
+
+| # | Funn | Alvor | Utbedring |
+| --- | --- | --- | --- |
+| 1 | Trykk og «sendt»-ramme på styrekorset ble firkanter inne i den runde platen, og rammen gikk over OK | 🔴 | Hver retning er en kakebit (`clip-path`) med treffflate som følger formen. Tilbakemeldingen er en farget bit, ikke en ramme. Tynne diagonaler viser inndelingen |
+| 2 | Omtrent 220 px tomrom midt på skjermen | 🟠 | Mellomrom og knapper vokser med skjermhøyden (med tak). **Siste søk** vises som knapper under søkefeltet på høye skjermer. Tomrommet er omtrent halvert, og blokkene henger sammen |
+| 3 | Fem like tunge bånd uten hierarki | 🟠 | Tydelig rekkefølge fra lett til tung: verktøylinje uten flate → **styrekors** → Tilbake/Hjem/Lyd av (hevet, flyttet under styrekorset som på en fysisk fjernkontroll) → avspilling (rolig flate) |
+| 4 | Trykkflater på 40 px og etiketter på 11 px | 🟠 | Alt er minst 44 px (`--tap`), og alle etiketter er minst 12 px |
+| 5 | To kantspråk (`--edge` og tunge `--line`) | 🟡 | `--line` brukes bare for inndatafelt (WCAG 1.4.11). Alt annet bruker `--edge`, `--hairline` og `--bevel` |
+| 6 | ⌨ i toppen og «Søk på YouTube» lignet hverandre | 🟡 | «Skriv på TV» er flyttet inn i **Mer**. Toppen har bare TV-valg og strøm |
+| 7 | Strøm så ut som en vanlig knapp | 🟡 | Rød tone og egen kant |
+| 8 | Kanalpilene var like styrekorsets | 🟡 | Kanal har fylte trekanter (▲▼), og etikettene «VOL» og «CH» står tydeligere |
+| 9 | Lite identitet, IP-adresse i toppen, og reserveikonet for YouTube var bare «Y» | 🔵 | Skriften **Manrope** (variabel, lokal, 25 kB, OFL). Toppen viser TV-type i stedet for IP. Reserveikoner har merkefarge og kortnavn (YT, NRK, TV2, D+ …), testet til minst 4,5:1 mot hvit |
+| 10 | Ark uten håndtak og uten lukke-animasjon, og aksentfargen var brukt overalt | 🔵 | Arkene har dra-håndtak og kan dras ned, lukkes med trykk utenfor, og glir ned (Escape og Android-tilbake inkludert). Aksenten brukes bare til OK og primærknapper. «Opptatt» er gul, valgt TV og «Spilles nå» er grønne, og fokusringen er hvit |
+| 11 | Skjermbildene i manifestet var utdatert | 🔵 | `public/screenshots/` er tatt på nytt fra 2.8.0 |
+
+### Verifisering
+- `npm run verify`: **80/80**. Ny test for reserveikoner: kortnavn, merkefarge, TV-ens egen farge vinner, og kontrast på minst 4,5:1 for alle merkene.
+- Chromium, automatisert:
+  - trykk på → høyre gir en farget bit
+  - midten treffer OK
+  - arket er fortsatt åpent 40 ms etter lukk (animasjonen) og er lukket etterpå
+  - Escape, trykk utenfor, lang dragning og `__fjernBack` lukker. Kort dragning og trykk inne i arket lukker ikke
+  - «Skriv på TV» fra Mer bytter ark
+  - Siste søk åpner YouTube med søket
+  - alt det samme med `prefers-reduced-motion`, da uten animasjon
+- Ingen rulling på 320×568, 360×640, 390×844 og 412×915, også med lange søk. Ingen konsollfeil.
+- Broen leverer `font/woff2`, og service workeren forhåndslagrer skriften.
+- Ikke verifisert: APK-bygg og test på fysisk telefon og TV.
+
+**Skår etter: 8,5 / 10.** Det som gjenstår: Etiketter kuttes på 320 px («Opps…», «Alle ap…»), og tomrommet på høye skjermer er mindre, men finnes fortsatt når det ikke er siste søk eller noe som spilles.
+
+| Før (390×844) | Etter (390×844) | Etter, siste søk (412×915) |
+| --- | --- | --- |
+| ![](docs/revisjon/runde8/01-for-390.png) | ![](docs/revisjon/runde8/02-etter-390.png) | ![](docs/revisjon/runde8/03-etter-412-siste-sok.png) |
+
+| Styrekors før | Styrekors etter |
+| --- | --- |
+| ![](docs/revisjon/runde8/04-styrekors-for.png) | ![](docs/revisjon/runde8/05-styrekors-etter.png) |
+
+| Mer | TV-er | 320×568 |
+| --- | --- | --- |
+| ![](docs/revisjon/runde8/06-mer.png) | ![](docs/revisjon/runde8/07-tv-er.png) | ![](docs/revisjon/runde8/08-etter-320.png) |

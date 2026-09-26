@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { addRecent, MAX_RECENT, BRIDGE_DOWN, defaultFavorites, displayName, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode } from '../public/logic.js';
+import { addRecent, MAX_RECENT, BRIDGE_DOWN, brandFor, defaultFavorites, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode } from '../public/logic.js';
 import { isPrivateIPv4 as serverIsPrivate } from '../lib/validate.mjs';
 
 test('klient og bro er enige om hva som er en lokal IP', () => {
@@ -90,6 +90,26 @@ test('bokstavikon og navn', () => {
   const tv = { type: 'lg', host: '192.168.0.3', name: 'LG OLED55C1' };
   assert.equal(displayName(tv, [{ ...tv, customName: 'Stue' }]), 'Stue');
   assert.equal(displayName(tv, []), 'LG OLED55C1');
+});
+
+test('reserveikoner for kjente apper har merkefarge, kortnavn og lesbar hvit tekst', () => {
+  assert.equal(initials('YouTube'), 'YT');
+  assert.equal(initials('TV 2 Play'), 'TV2');
+  assert.equal(initials('HBO Max'), 'max');
+  assert.equal(brandFor('Telia Play'), null);
+  assert.equal(fallbackColor({ id: 'x', name: 'Netflix' }), brandFor('Netflix').color);
+  assert.equal(fallbackColor({ id: 'x', name: 'Netflix', color: '#123456' }), '#123456', 'TV-ens egen farge vinner');
+  const luminance = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const names = ['Netflix', 'YouTube', 'NRK TV', 'TV 2 Play', 'Disney+', 'HBO Max', 'Prime Video', 'Spotify', 'Viaplay', 'Apple TV', 'Twitch', 'Plex'];
+  for (const name of names) {
+    const { color } = brandFor(name);
+    const contrast = 1.05 / (luminance(color) + 0.05);
+    assert.ok(contrast >= 4.5, `${name}: kontrast ${contrast.toFixed(2)} mot hvit`);
+  }
 });
 
 test('siste YouTube-søk: nyeste først, uten duplikater, med tak', () => {
