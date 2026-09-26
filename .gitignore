@@ -1,0 +1,5 @@
+# LG-paringsnøkler gir full kontroll over TV-en. Skal aldri i git.
+data/
+node_modules/
+*.log
+.DS_Store

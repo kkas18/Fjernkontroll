@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1012">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Fjern">
+  <meta name="description" content="Fjernkontroll for Roku og LG webOS på lokalnettet.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+  <link rel="stylesheet" href="/style.css">
+  <title>Fjern</title>
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7 14h10"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7"/><path d="M6 9.5V20h12V9.5"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z"/><path d="m16 9.5 5 5m0-5-5 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-rewind" viewBox="0 0 24 24"><path d="M11 7 5 12l6 5V7Z"/><path d="M19 7l-6 5 6 5V7Z"/></symbol>
+    <symbol id="i-forward" viewBox="0 0 24 24"><path d="m13 7 6 5-6 5V7Z"/><path d="m5 7 6 5-6 5V7Z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5L8 5.5Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 6v12M15.5 6v12"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-playpause" viewBox="0 0 24 24"><path d="M4 6v12l8-6-8-6Z" fill="currentColor"/><path d="M15.5 6.5v11M19.5 6.5v11"/></symbol>
+    <symbol id="i-delete" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-6-7 6-7Z"/><path d="m12 9.5 5 5m0-5-5 5"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></symbol>
+  </svg>
+
+  <div class="app">
+    <header class="bar">
+      <button id="deviceButton" class="device" type="button" aria-haspopup="dialog" aria-controls="devicesSheet">
+        <span id="led" class="led" aria-hidden="true"></span>
+        <span class="device-text"><span id="deviceName" class="device-name">Ingen TV</span><span id="deviceMeta" class="device-meta mono" hidden></span></span>
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </button>
+      <div class="bar-actions">
+        <button id="textOpen" class="icon-button" type="button" aria-label="Send tekst til TV-en"><svg class="icon" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
+        <button id="powerOpen" class="icon-button" type="button" aria-label="Strøm"><svg class="icon" aria-hidden="true"><use href="#i-power"/></svg></button>
+      </div>
+    </header>
+
+    <div id="notice" class="notice" hidden>
+      <p id="noticeText"></p>
+      <button id="noticeAction" class="button small" type="button" hidden></button>
+    </div>
+    <div id="announce" class="sr-only" role="status" aria-live="polite"></div>
+
+    <main id="remote" class="remote" aria-label="Fjernkontroll" hidden>
+      <section id="apps" class="apps" aria-labelledby="appsTitle" hidden>
+        <h2 id="appsTitle" class="apps-title">Apper</h2>
+        <div id="appGrid" class="app-grid"></div>
+      </section>
+
+      <div class="row">
+        <button class="key" type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
+        <button class="key" type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
+        <button class="key" type="button" data-key="Mute"><svg class="icon" aria-hidden="true"><use href="#i-mute"/></svg><span>Lyd av</span></button>
+      </div>
+
+      <div class="cluster">
+        <div class="rocker" role="group" aria-label="Volum">
+          <button type="button" data-key="VolumeUp" data-repeat aria-label="Volum opp"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          <span class="rocker-label" aria-hidden="true">Vol</span>
+          <button type="button" data-key="VolumeDown" data-repeat aria-label="Volum ned"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+        </div>
+
+        <div class="dpad" role="group" aria-label="Navigasjon">
+          <button class="dir up" type="button" data-key="Up" data-repeat aria-label="Opp"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+          <button class="dir left" type="button" data-key="Left" data-repeat aria-label="Venstre"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
+          <button class="dir right" type="button" data-key="Right" data-repeat aria-label="Høyre"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button>
+          <button class="dir down" type="button" data-key="Down" data-repeat aria-label="Ned"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+          <button class="ok" type="button" data-key="Select">OK</button>
+        </div>
+
+        <div id="channelRocker" class="rocker" role="group" aria-label="Kanal">
+          <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+          <span class="rocker-label" aria-hidden="true">Kanal</span>
+          <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+        </div>
+      </div>
+
+      <div class="row transport" role="group" aria-label="Avspilling">
+        <button class="key" type="button" data-key="Rewind" aria-label="Spol tilbake"><svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg></button>
+        <button class="key" type="button" data-key="Play" data-transport="separate" aria-label="Spill av"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button class="key" type="button" data-key="Pause" data-transport="separate" aria-label="Pause"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg></button>
+        <button class="key" type="button" data-key="Play" data-transport="toggle" aria-label="Spill av eller pause" hidden><svg class="icon" aria-hidden="true"><use href="#i-playpause"/></svg></button>
+        <button class="key" type="button" data-key="FastForward" aria-label="Spol fram"><svg class="icon" aria-hidden="true"><use href="#i-forward"/></svg></button>
+      </div>
+    </main>
+
+    <section id="empty" class="empty" aria-labelledby="emptyTitle" hidden>
+      <h1 id="emptyTitle">Ingen TV valgt</h1>
+      <p>Telefonen og TV-en må være på samme Wi‑Fi.</p>
+      <div class="stack">
+        <button id="emptyScan" class="button primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>Søk etter TV</button>
+        <button id="emptyManual" class="button" type="button">Legg til med IP-adresse</button>
+      </div>
+    </section>
+  </div>
+
+  <dialog id="devicesSheet" class="sheet" aria-labelledby="devicesTitle">
+    <div class="sheet-head">
+      <h2 id="devicesTitle">TV-er</h2>
+      <button class="icon-button" type="button" data-close="devicesSheet" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="stack two">
+      <button id="scan" class="button primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span id="scanLabel">Søk</span></button>
+      <button id="manualOpen" class="button" type="button">Legg til IP</button>
+    </div>
+    <h3 class="list-title">Lagret</h3>
+    <ul id="savedList" class="device-list"></ul>
+    <h3 class="list-title">Funnet på nettverket</h3>
+    <ul id="foundList" class="device-list"></ul>
+    <details class="help">
+      <summary>Slik kobler du til</summary>
+      <ol>
+        <li>Telefon og TV må være på samme Wi‑Fi. Gjestenett blokkerer ofte tilkoblingen.</li>
+        <li>Broen må kjøre i Termux: <code>npm start</code>. Appen åpnes på <code>localhost:8765</code>.</li>
+        <li>Roku: slå på <i>Settings → System → Advanced system settings → Control by mobile apps</i>.</li>
+        <li>LG webOS: godkjenn forespørselen som vises på TV-en første gang.</li>
+      </ol>
+      <p>Støtter Roku og LG webOS. Samsung, Google TV og rene IR-TV-er støttes ikke. Alt skjer lokalt, uten konto eller sky.</p>
+    </details>
+  </dialog>
+
+  <dialog id="manualDialog" class="sheet" aria-labelledby="manualTitle">
+    <form id="manualForm" method="dialog" novalidate>
+      <div class="sheet-head">
+        <h2 id="manualTitle">Legg til med IP</h2>
+        <button class="icon-button" type="button" data-close="manualDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <fieldset class="segmented">
+        <legend>Type</legend>
+        <label><input type="radio" name="deviceType" value="roku" checked><span>Roku</span></label>
+        <label><input type="radio" name="deviceType" value="lg"><span>LG webOS</span></label>
+      </fieldset>
+      <label class="field-label" for="ip">IP-adresse</label>
+      <input id="ip" class="field mono" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.42" aria-describedby="ipHint" required>
+      <p id="ipHint" class="hint">Står under nettverksinnstillinger på TV-en.</p>
+      <button type="submit" class="button primary">Koble til</button>
+    </form>
+  </dialog>
+
+  <dialog id="textDialog" class="sheet" aria-labelledby="textTitle">
+    <form id="textForm" method="dialog" novalidate>
+      <div class="sheet-head">
+        <h2 id="textTitle">Send tekst</h2>
+        <button class="icon-button" type="button" data-close="textDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <label class="field-label" for="tvText">Tekst</label>
+      <input id="tvText" class="field" maxlength="140" autocomplete="off" enterkeyhint="send" aria-describedby="textHint" required>
+      <p id="textHint" class="hint">Marker et tekstfelt på TV-en først.</p>
+      <div class="stack two">
+        <button id="textBackspace" type="button" class="button"><svg class="icon" aria-hidden="true"><use href="#i-delete"/></svg>Slett tegn</button>
+        <button type="submit" class="button primary">Send</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="powerDialog" class="sheet" aria-labelledby="powerTitle">
+    <div class="sheet-head">
+      <h2 id="powerTitle">Strøm</h2>
+      <button class="icon-button" type="button" data-close="powerDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+    <p id="powerHint" class="hint"></p>
+    <div class="stack two">
+      <button id="powerOn" type="button" class="button">Slå på</button>
+      <button id="powerOff" type="button" class="button danger">Slå av</button>
+    </div>
+  </dialog>
+
+  <dialog id="removeDialog" class="sheet" aria-labelledby="removeTitle">
+    <div class="sheet-head">
+      <h2 id="removeTitle">Fjerne TV-en?</h2>
+    </div>
+    <p id="removeText" class="hint"></p>
+    <div class="stack two">
+      <button type="button" class="button" data-close="removeDialog">Avbryt</button>
+      <button id="removeConfirm" type="button" class="button danger">Fjern</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="alert"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
