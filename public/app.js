@@ -1,6 +1,6 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
 import {
-  BRIDGE_DOWN, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
+  addRecent, BRIDGE_DOWN, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
   normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, typeLabel,
 } from './logic.js';
 
@@ -158,6 +158,7 @@ function render() {
   $('#noticeAction').dataset.action = notice.action?.id || '';
 
   $('#remote').hidden = !device;
+  $('#homeTop').hidden = !device || capabilities?.search !== 'youtube';
   $('#empty').hidden = Boolean(device);
   $('#powerOpen').disabled = !device;
   $('#textOpen').disabled = !device;
@@ -224,7 +225,6 @@ function applyCapabilities(capabilities) {
     else el.hidden = !ok;
   }
   $('.color-keys').hidden = !$$('.color-keys [data-cap]').some((el) => !el.hidden);
-  $('#ytSearch').hidden = capabilities?.search !== 'youtube';
 }
 
 function renderApps() {
@@ -447,6 +447,15 @@ async function launch(app, button) {
   try {
     await api('launch', { id: app.id });
     flash(button, 'is-sent', 200);
+    if (state.nowPlaying) {
+      state.nowPlaying = null;
+      renderNowPlaying();
+    }
+    // Engangshint: YouTube på TV-en er tungvint å søke i med fjernkontrollen.
+    if (/youtube/i.test(app.name) && !storage.read('fjern-hint-yt', false)) {
+      storage.write('fjern-hint-yt', true);
+      setTimeout(() => toast('Tips: Søk enklere fra mobilen med «Søk på YouTube» øverst.'), 600);
+    }
   } catch (error) {
     flash(button, 'is-failed', 600);
     toast(error.message);
@@ -621,22 +630,49 @@ $('#textOpen').addEventListener('click', () => {
   $('#tvText').focus();
 });
 $('#textBackspace').addEventListener('click', (event) => send('Backspace', event.currentTarget));
-// YouTube-modus: søk på mobilen, se resultatene her, og trykk for å spille på TV-en (som casting).
+// ---------- YouTube: søk på mobilen, spill av på TV-en ----------
+
+const RECENT_KEY = 'fjern-yt-recent';
+const recentSearches = () => addRecent(storage.read(RECENT_KEY, []), '');
+const rememberSearch = (query) => storage.write(RECENT_KEY, addRecent(storage.read(RECENT_KEY, []), query));
+
+function renderRecent() {
+  const list = recentSearches();
+  const showRecent = list.length > 0 && !$('#ytResults').children.length;
+  $('#ytRecentBox').hidden = !showRecent;
+  $('#ytRecent').replaceChildren(...list.map((query) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.textContent = query;
+    chip.addEventListener('click', () => {
+      $('#ytQuery').value = query;
+      runSearch(query);
+    });
+    return chip;
+  }));
+}
+
+function thumbnail(id, className) {
+  const box = document.createElement('span');
+  box.className = className;
+  const img = document.createElement('img');
+  img.alt = '';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.src = `/api/ytthumb/${encodeURIComponent(id)}`;
+  img.addEventListener('error', () => img.remove());
+  box.append(img);
+  return box;
+}
+
 function videoRow(video) {
   const li = document.createElement('li');
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'yt-item';
   button.setAttribute('aria-label', `Spill ${video.title} på TV-en`);
-  const thumb = document.createElement('span');
-  thumb.className = 'yt-thumb';
-  const img = document.createElement('img');
-  img.alt = '';
-  img.loading = 'lazy';
-  img.decoding = 'async';
-  img.src = `/api/ytthumb/${encodeURIComponent(video.id)}`;
-  img.addEventListener('error', () => img.remove());
-  thumb.append(img);
+  const thumb = thumbnail(video.id, 'yt-thumb');
   if (video.duration) {
     const badge = document.createElement('span');
     badge.className = video.duration === 'Direkte' ? 'yt-duration live' : 'yt-duration';
@@ -653,42 +689,171 @@ function videoRow(video) {
   meta.textContent = [video.channel, video.views].filter(Boolean).join(' · ');
   textBox.append(title, meta);
   button.append(thumb, textBox);
-  button.addEventListener('click', async () => {
-    haptic();
-    button.classList.add('is-playing');
-    try {
-      await api('ytplay', { id: video.id });
-      $('#textDialog').close();
-      toast('Spilles på TV-en.');
-    } catch (error) {
-      button.classList.remove('is-playing');
-      toast(error.message);
-    }
-  });
+  button.addEventListener('click', () => playVideo(video, button));
   li.append(button);
   return li;
 }
 
-$('#textForm').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const query = $('#tvText').value.trim();
-  if (!query) {
-    $('#tvText').focus();
+async function playVideo(video, button) {
+  haptic();
+  button?.classList.add('is-playing');
+  try {
+    await api('ytplay', { id: video.id });
+    state.nowPlaying = video;
+    renderNowPlaying();
+    toast('Spilles på TV-en.');
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button?.classList.remove('is-playing');
+  }
+}
+
+let searchToken = 0;
+async function runSearch(query) {
+  const q = query.trim();
+  if (!q) return;
+  const token = ++searchToken;
+  $('#ytQuery').blur(); // skjul mobiltastaturet så resultatene synes
+  rememberSearch(q);
+  $('#ytResults').replaceChildren();
+  $('#ytRecentBox').hidden = true;
+  $('#ytStatus').textContent = `Søker etter «${q}» …`;
+  try {
+    const { videos } = await api('ytsearch', { query: q });
+    if (token !== searchToken) return;
+    $('#ytStatus').textContent = videos.length ? '' : `Ingen treff for «${q}».`;
+    $('#ytResults').replaceChildren(...videos.map(videoRow));
+    $('.ytview-body').scrollTop = 0;
+  } catch (error) {
+    if (token === searchToken) $('#ytStatus').textContent = error.message;
+  }
+}
+
+// «Spilles nå»: liten linje med det som går på TV-en, både på forsiden og i YouTube-visningen.
+function nowBar(target) {
+  const video = state.nowPlaying;
+  target.hidden = !video;
+  if (!video) return target.replaceChildren();
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'nowbar-main';
+  open.setAttribute('aria-label', `Spilles nå: ${video.title}`);
+  const label = document.createElement('span');
+  label.className = 'nowbar-text';
+  const small = document.createElement('small');
+  small.textContent = 'Spilles nå';
+  const title = document.createElement('span');
+  title.textContent = video.title;
+  label.append(small, title);
+  open.append(thumbnail(video.id, 'nowbar-thumb'), label);
+  open.addEventListener('click', () => (target.id === 'nowYt' ? closeYouTube() : openYouTube()));
+  const play = document.createElement('button');
+  play.type = 'button';
+  play.className = 'nowbar-action';
+  play.setAttribute('aria-label', 'Spill av / pause');
+  play.append(svgIcon('playpause'));
+  play.addEventListener('click', () => send('PlayPause', play));
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'nowbar-action';
+  close.setAttribute('aria-label', 'Skjul «Spilles nå»');
+  close.append(svgIcon('close'));
+  close.addEventListener('click', () => {
+    state.nowPlaying = null;
+    renderNowPlaying();
+  });
+  target.replaceChildren(open, play, close);
+}
+function renderNowPlaying() {
+  nowBar($('#nowHome'));
+  nowBar($('#nowYt'));
+}
+
+function openYouTube({ focus = true } = {}) {
+  $('#ytView').hidden = false;
+  document.body.classList.add('yt-open');
+  renderRecent();
+  renderNowPlaying();
+  if (focus && !$('#ytResults').children.length) $('#ytQuery').focus();
+}
+function closeYouTube() {
+  $('#ytView').hidden = true;
+  document.body.classList.remove('yt-open');
+}
+
+// Talesøk: Android-appen bruker telefonens talegjenkjenning; Chrome har sin egen.
+const voicePending = new Map();
+let voiceId = 0;
+window.__fjernVoice = (id, text) => {
+  const resolve = voicePending.get(id);
+  voicePending.delete(id);
+  resolve?.(text || '');
+};
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const voiceAvailable = Boolean(native?.voiceAvailable?.()) || Boolean(SpeechRecognition);
+
+function listen() {
+  if (native?.voiceAvailable?.()) {
+    return new Promise((resolve) => {
+      const id = String(++voiceId);
+      voicePending.set(id, resolve);
+      native.voice(id);
+    });
+  }
+  return new Promise((resolve) => {
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'nb-NO';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => resolve(event.results[0]?.[0]?.transcript || '');
+    recognition.onerror = () => resolve('');
+    recognition.onend = () => resolve('');
+    recognition.start();
+  });
+}
+
+async function voiceSearch() {
+  openYouTube({ focus: false });
+  $('#ytStatus').textContent = 'Lytter … si hva du vil se.';
+  const text = (await listen()).trim();
+  if (!text) {
+    $('#ytStatus').textContent = 'Fikk ikke med meg det. Prøv igjen, eller skriv.';
     return;
   }
-  $('#tvText').blur(); // skjul mobiltastaturet så resultatene synes
-  $('#ytStatus').textContent = `Søker etter «${query}» …`;
-  $('#ytResults').replaceChildren();
-  try {
-    const { videos } = await api('ytsearch', { query });
-    $('#ytStatus').textContent = videos.length ? `${videos.length} treff. Trykk på en video for å spille den på TV-en.` : `Ingen treff for «${query}».`;
-    $('#ytResults').replaceChildren(...videos.map(videoRow));
-  } catch (error) {
-    $('#ytStatus').textContent = error.message;
+  $('#ytQuery').value = text;
+  runSearch(text);
+}
+
+$('#searchOpen').addEventListener('click', (event) => {
+  if (event.target.closest('#searchPillMic')) voiceSearch();
+  else openYouTube();
+});
+$('#ytBack').addEventListener('click', closeYouTube);
+$('#ytMic').addEventListener('click', voiceSearch);
+$('#ytForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  runSearch($('#ytQuery').value);
+});
+$('#ytQuery').addEventListener('input', () => {
+  if (!$('#ytQuery').value) {
+    $('#ytResults').replaceChildren();
+    $('#ytStatus').textContent = '';
+    renderRecent();
   }
 });
-// «Skriv på TV» skriver i tekstfeltet som er åpent på TV-en; arket blir stående for mer skriving.
-$('#textSend').addEventListener('click', async () => {
+$('#ytRecentClear').addEventListener('click', () => {
+  storage.write(RECENT_KEY, []);
+  renderRecent();
+});
+$('#ytMic').hidden = !voiceAvailable;
+$('#searchPillMic').hidden = !voiceAvailable;
+
+// ---------- Skriv på TV ----------
+
+// Teksten skrives i feltet som er åpent på TV-en; arket blir stående for mer skriving.
+$('#textForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
   const text = $('#tvText').value;
   if (!text.trim()) {
     $('#tvText').focus();
@@ -764,7 +929,7 @@ const KEYBOARD = {
   ...Object.fromEntries(Array.from({ length: 10 }, (_, n) => [String(n), `Num${n}`])),
 };
 document.addEventListener('keydown', (event) => {
-  if (document.querySelector('dialog[open]') || event.target.closest('input, textarea, select')) return;
+  if (document.querySelector('dialog[open]') || !$('#ytView').hidden || event.target.closest('input, textarea, select')) return;
   // Enter på en fokusert knapp skal trykke den knappen, ikke sende OK til TV-en.
   if ((event.key === 'Enter' || event.key === ' ') && event.target.closest('button, summary')) return;
   const key = KEYBOARD[event.key];
@@ -790,9 +955,15 @@ document.addEventListener('visibilitychange', () => {
 // Android-tilbakeknappen lukker først et åpent ark.
 window.__fjernBack = () => {
   const open = document.querySelector('dialog[open]');
-  if (!open) return false;
-  open.close();
-  return true;
+  if (open) {
+    open.close();
+    return true;
+  }
+  if (!$('#ytView').hidden) {
+    closeYouTube();
+    return true;
+  }
+  return false;
 };
 
 if (!native && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});

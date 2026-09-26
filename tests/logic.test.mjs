@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { BRIDGE_DOWN, defaultFavorites, displayName, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode } from '../public/logic.js';
+import { addRecent, MAX_RECENT, BRIDGE_DOWN, defaultFavorites, displayName, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode } from '../public/logic.js';
 import { isPrivateIPv4 as serverIsPrivate } from '../lib/validate.mjs';
 
 test('klient og bro er enige om hva som er en lokal IP', () => {
@@ -90,5 +90,16 @@ test('bokstavikon og navn', () => {
   const tv = { type: 'lg', host: '192.168.0.3', name: 'LG OLED55C1' };
   assert.equal(displayName(tv, [{ ...tv, customName: 'Stue' }]), 'Stue');
   assert.equal(displayName(tv, []), 'LG OLED55C1');
+});
+
+test('siste YouTube-søk: nyeste først, uten duplikater, med tak', () => {
+  assert.deepEqual(addRecent(['lofi', 'nrk'], 'NRK'), ['NRK', 'lofi']);
+  assert.deepEqual(addRecent([], '  katter  '), ['katter']);
+  assert.deepEqual(addRecent(['a'], '   '), ['a'], 'tomt søk lagres ikke');
+  assert.deepEqual(addRecent('ødelagt', 'x'), ['x'], 'ødelagt lagring tåles');
+  let list = [];
+  for (let i = 0; i < 20; i++) list = addRecent(list, `søk ${i}`);
+  assert.equal(list.length, MAX_RECENT);
+  assert.equal(list[0], 'søk 19');
 });
 

@@ -154,3 +154,32 @@ Knapper TV-en ikke har, skjules automatisk ut fra `capabilities.keys`, som broen
 - Chromium: søk → 19 treff med bilder → trykk → `ytplay` sendes, arket lukkes, og «Spilles på TV-en» vises.
 
 ![](docs/revisjon/runde6/01-youtube-resultater.png)
+
+---
+
+## Runde 7 (v2.7.0): YouTube som egen, tydelig funksjon
+
+**Brukerens tilbakemelding:** YouTube-modusen virker veldig bra, men den er gjemt bak tastaturknappen. Andre brukere forstår den ikke.
+
+**Designprinsipp** (ECC `frontend-design-direction`): én knapp skal ha én jobb, og det viktigste skal være synlig uten forklaring. Mønsteret følger fjernkontroll-appene for Google TV og Roku.
+
+| Før | Etter |
+| --- | --- |
+| YouTube-søket lå bak ⌨, i samme ark som «skriv tekst på TV» | Et **søkefelt «Søk på YouTube»** øverst på forsiden. Det bruker plassen som før sto tom |
+| Resultatene i et ark som gled opp | **Eget YouTube-skjermbilde** med tilbakeknapp. Android-tilbakeknappen lukker det |
+| Ingen oversikt over hva som spilles | **«Spilles nå»** med miniatyrbilde, tittel, ⏯ og skjul, både på forsiden og i YouTube-visningen |
+| – | **Siste søk** som knapper (maks 8, uten duplikater, kan tømmes) |
+| – | **🎤 Talesøk:** Android bruker `RecognizerIntent` (nb-NO) uten mikrofontillatelse, siden Google-appen tar lyden. Nettversjonen bruker Chromes talegjenkjenning |
+| ⌨ hadde to jobber | ⌨ gjør bare **«Skriv på TV»**, for eksempel passord og Wi‑Fi-navn |
+| – | **Engangshint** når YouTube åpnes fra favorittene: «Søk enklere fra mobilen» |
+
+### Verifisering
+- `npm run verify`: **79/79**. Ny test for siste søk: rekkefølge, duplikater, tak og ødelagt lagring.
+- Kotlin **15/15**, APK 2.7.0. `<queries>` for `RECOGNIZE_SPEECH` er bekreftet i manifestet i APK-en.
+- Chromium, 412×915 og 360×800:
+  - søkefelt → YouTube → siste søk → resultater → spill → «Spilles nå» → talesøk («nrk nyheter») → tilbake → ⏯ fra forsiden
+  - ingen rulling og ingen konsollfeil
+
+| Forside | YouTube | Spilles nå |
+| --- | --- | --- |
+| ![](docs/revisjon/runde7/01-forside.png) | ![](docs/revisjon/runde7/03-youtube-resultater.png) | ![](docs/revisjon/runde7/04-forside-spilles-na.png) |

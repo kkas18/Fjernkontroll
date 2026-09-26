@@ -516,7 +516,6 @@ form .button { width: 100%; margin-top: var(--s-5); }
 .app-open.is-disconnected { color: var(--muted); }
 
 /* YouTube-modus: resultater på mobilen, avspilling på TV-en */
-#textDialog { max-height: 92dvh; }
 .yt-list { list-style: none; margin: var(--s-2) 0 0; padding: 0; display: grid; gap: var(--s-1); }
 .yt-item {
   width: 100%;
@@ -560,4 +559,100 @@ form .button { width: 100%; margin-top: var(--s-5); }
   overflow: hidden;
 }
 .yt-meta { font-size: var(--t-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Forsiden: søkefelt og «Spilles nå» øverst */
+.home-top { display: grid; gap: var(--s-2); margin-top: var(--s-1); }
+.search-pill {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0 var(--s-2) 0 var(--s-4);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+  text-align: left;
+  transition-property: background-color;
+  transition-duration: var(--press);
+}
+.search-pill > span:first-of-type { flex: 1; font-size: var(--t-m); }
+.search-pill:active { background: var(--raised); }
+.search-pill-mic { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--r-full); color: var(--text); }
+.search-pill-mic:active { background: var(--raised-hi); }
+
+.nowbar {
+  display: grid;
+  grid-template-columns: 1fr 44px 40px;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-1);
+  border-radius: var(--r-m);
+  background: var(--raised);
+  box-shadow: var(--bevel);
+}
+.nowbar-main { min-width: 0; display: flex; align-items: center; gap: var(--s-3); padding: 0; border: 0; background: none; text-align: left; }
+.nowbar-thumb { width: 64px; flex: none; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: var(--surface); }
+.nowbar-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.nowbar-text { min-width: 0; display: grid; }
+.nowbar-text small { font-size: 11px; color: var(--accent); font-weight: 600; }
+.nowbar-text span { font-size: var(--t-s); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nowbar-action { height: 40px; display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; }
+.nowbar-action:active { background: var(--raised-hi); }
+
+/* YouTube: eget skjermbilde over fjernkontrollen */
+.ytview {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  background: var(--bg);
+  animation: rise 160ms ease-out;
+}
+body.yt-open { overflow: hidden; }
+.ytview-head { display: flex; align-items: center; gap: var(--s-1); padding: var(--s-2) var(--s-3) var(--s-2) var(--s-2); }
+.icon-button.plain { background: none; border-color: transparent; box-shadow: none; }
+.ytview-field {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-1) 0 var(--s-3);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--muted);
+}
+.ytview-field:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
+.ytview-field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; color: var(--text); font-size: var(--t-m); outline: none; }
+.ytview-field input::-webkit-search-cancel-button { filter: invert(1) brightness(0.8); }
+.ytview-mic { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; color: var(--text); }
+.ytview-mic:active { background: var(--raised); }
+.ytview-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--s-2) var(--s-4); overscroll-behavior: contain; }
+.ytview-body > .hint { padding: 0 var(--s-2); }
+.nowbar.floating { margin: 0 var(--s-3) var(--s-3); }
+
+.yt-recent { padding: var(--s-2) var(--s-2) 0; }
+.yt-recent-head { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
+.yt-recent-head h2 { font-size: var(--t-s); font-weight: 600; color: var(--muted); }
+.link-button { min-height: 40px; padding: 0 var(--s-2); border: 0; background: none; color: var(--muted); font-size: var(--t-s); }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.chip {
+  min-height: 40px;
+  max-width: 100%;
+  padding: 0 var(--s-4);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  font-size: var(--t-s);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip:active { background: var(--raised); }
 

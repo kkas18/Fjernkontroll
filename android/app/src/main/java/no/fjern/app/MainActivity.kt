@@ -7,7 +7,10 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.wifi.WifiManager
+import android.content.Intent
 import android.os.Bundle
+import android.speech.RecognizerIntent
+import androidx.activity.result.contract.ActivityResultContracts
 import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -35,6 +38,34 @@ class MainActivity : ComponentActivity() {
     private lateinit var lg: LgSession
     private lateinit var bridge: Bridge
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    // Talesøk via telefonens egen talegjenkjenning (norsk). Registreres før aktiviteten starter.
+    private var voiceCallback: ((String?) -> Unit)? = null
+    private val voiceLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        voiceCallback?.invoke(if (result.resultCode == RESULT_OK) text else null)
+        voiceCallback = null
+    }
+    private val voiceIntent
+        get() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "nb-NO")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Hva vil du se på YouTube?")
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+    private val voiceInput = object : NativeBridge.VoiceInput {
+        override fun available() = voiceIntent.resolveActivity(packageManager) != null
+        override fun listen(onResult: (String?) -> Unit) {
+            voiceCallback?.invoke(null)
+            voiceCallback = onResult
+            try {
+                voiceLauncher.launch(voiceIntent)
+            } catch (e: Exception) {
+                log("Talesøk: ${e.message}")
+                voiceCallback = null
+                onResult(null)
+            }
+        }
+    }
 
     companion object {
         private const val HOST = "appassets.androidplatform.net"
@@ -107,7 +138,7 @@ class MainActivity : ComponentActivity() {
             }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = request.url.host != HOST
         }
-        webView.addJavascriptInterface(NativeBridge(webView, bridge, scope), "FjernAndroid")
+        webView.addJavascriptInterface(NativeBridge(webView, bridge, scope, voiceInput), "FjernAndroid")
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {

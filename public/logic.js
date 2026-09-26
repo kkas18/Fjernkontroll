@@ -104,3 +104,15 @@ export function normalizeName(device) {
 
 export const displayName = (device, saved = []) =>
   saved.find((d) => sameDevice(d, device))?.customName || device?.name || 'Ingen TV';
+
+// ---------- YouTube: siste søk ----------
+
+export const MAX_RECENT = 8;
+
+// Nyeste først, uten duplikater (uavhengig av store og små bokstaver), med tak.
+export function addRecent(list, query, max = MAX_RECENT) {
+  const q = String(query || '').trim().slice(0, 100);
+  const clean = (Array.isArray(list) ? list : []).filter((item) => typeof item === 'string' && item.trim());
+  if (!q) return clean.slice(0, max);
+  return [q, ...clean.filter((item) => item.toLowerCase() !== q.toLowerCase())].slice(0, max);
+}
