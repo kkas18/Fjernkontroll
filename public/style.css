@@ -60,10 +60,13 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+/* Fjernkontrollen står fast: siden ruller aldri, verken opp/ned eller sidelengs.
+   Bare ark og YouTube-visningen har egen rulling. */
+html { height: 100%; overflow: hidden; background: var(--bg); -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  min-height: 100dvh;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font: 500 var(--t-m)/1.45 var(--font);
@@ -89,7 +92,9 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 /* Ramme */
 .app {
   max-width: 480px;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   margin: 0 auto;
   padding: env(safe-area-inset-top) var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom));
   display: flex;
@@ -160,7 +165,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .remote { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-3), 2.2dvh, 22px); padding-top: var(--s-3); }
 
 /* Favorittene står rett over kontrollene, så alt er samlet i én blokk ved tommelen. */
-.apps { flex: 0 0 auto; margin-top: auto; display: flex; flex-direction: column; }
+.apps { flex: 0 0 auto; display: flex; flex-direction: column; }
 .fav-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-3) var(--s-2); }
 .fav {
   min-width: 0;
@@ -287,12 +292,21 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .segmented-bar.transport button:active { background: var(--raised); }
 .segmented-bar.transport .primary-play .icon { width: 26px; height: 26px; }
 
-.cluster { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; align-items: center; gap: var(--s-2); }
+/* Styrekorset tar plassen som er igjen: det vokser på høye skjermer og krymper på lave,
+   så alt alltid får plass uten rulling (container-enheter måler klyngens egen størrelse). */
+.cluster {
+  flex: 1 1 0;
+  min-height: 140px;
+  container-type: size;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: var(--s-2);
+}
+.cluster > * { --pad: min(100cqh, calc(100cqw - 128px), 320px); }
 
 .rocker {
-  height: 100%;
-  min-height: 168px;
-  max-height: 260px;
+  height: min(var(--pad), 280px);
   display: grid;
   grid-template-rows: 1fr auto 1fr;
   border-radius: var(--r-full);
@@ -301,16 +315,15 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   box-shadow: var(--bevel);
   overflow: hidden;
 }
-.rocker button { border: 0; background: none; display: grid; place-items: center; min-height: 56px; }
+.rocker button { border: 0; background: none; display: grid; place-items: center; min-height: 0; }
 .rocker button:active { background: var(--raised-hi); }
 .rocker.is-unused { visibility: hidden; }
 .rocker-label { text-align: center; font-size: var(--t-xs); font-weight: 750; letter-spacing: 0.08em; color: var(--text); opacity: 0.8; padding: var(--s-1) 0; }
 
 .dpad {
   position: relative;
-  width: 100%;
-  max-width: min(300px, 40dvh);
-  aspect-ratio: 1;
+  width: var(--pad);
+  height: var(--pad);
   justify-self: center;
   border-radius: var(--r-full);
   background: var(--raised);
@@ -726,9 +739,9 @@ body.yt-open { overflow: hidden; }
 .chip:active { background: var(--raised); }
 
 /* Siste søk på forsiden: én rad under søkefeltet */
-.home-recent { display: flex; gap: var(--s-2); overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--s-4)); padding: 0 var(--s-4); }
-.home-recent::-webkit-scrollbar { display: none; }
-.home-recent .chip { flex: none; display: flex; align-items: center; gap: 6px; max-width: 70%; padding: 0 var(--s-3); color: var(--muted); border: 1px solid var(--edge); }
+/* Én fast rad uten sidelengs rulling: knapper som ikke får plass, skjules. */
+.home-recent { display: flex; flex-wrap: wrap; gap: var(--s-2); height: var(--tap); overflow: hidden; }
+.home-recent .chip { flex: none; display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 0 var(--s-3); color: var(--muted); border: 1px solid var(--edge); }
 .home-recent .chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .home-recent .chip .icon { width: 16px; height: 16px; }
 
@@ -738,7 +751,6 @@ body.yt-open { overflow: hidden; }
   .home-recent { display: none; }
 }
 @media (min-height: 760px) {
-  .remote { gap: clamp(var(--s-4), 3dvh, 30px); }
   .segmented-bar button { min-height: 58px; }
   .segmented-bar.transport button { min-height: 54px; }
   .tool { min-height: 54px; }
@@ -752,5 +764,4 @@ body.yt-open { overflow: hidden; }
   .tool .icon { width: 18px; height: 18px; }
   .segmented-bar button { min-height: 48px; }
   .segmented-bar.transport button { min-height: var(--tap); }
-  .rocker { min-height: 150px; }
 }
