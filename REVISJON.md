@@ -224,7 +224,7 @@ $ curl -H "Host: localhost:8799" http://127.0.0.1:8799/   →  404
 - Beskyttelse mot path traversal med `path.resolve` og prefikssjekk.
 - Forespørsler er begrenset til 16 KB, og kommandoer valideres mot en hviteliste.
 - Frontenden bruker bare `textContent` og `createElement`, altså ingen `innerHTML`.
-- Bekreftelsesdialog før strøm av, og god norsk mikrotekst i grensesnittet.
+- Bekreftelsesdialog før strøm av, og tydelig norsk tekst i feil- og hjelpemeldinger (slagordene er et eget problem, se del A2).
 - `generation`-telleren håndterer at en ny tilkobling erstatter en gammel på en ryddig måte.
 
 ---
