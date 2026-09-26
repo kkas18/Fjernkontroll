@@ -121,7 +121,7 @@ test('Roku: capabilities, ECP-taster, tekst og helsesjekk', async () => {
   assert.equal(connect.status, 200);
   assert.deepEqual(connect.json.device, { type: 'roku', host: '192.168.1.5', name: 'Roku Stue' });
   assert.equal(connect.json.ready, true);
-  assert.equal(connect.json.capabilities.playPause, 'toggle');
+  assert.equal(connect.json.capabilities.playPause, 'single');
   assert.equal(connect.json.capabilities.channels, false);
   assert.equal(connect.json.capabilities.powerOn, false);
   assert.equal(connect.json.capabilities.search, 'youtube');
@@ -164,7 +164,7 @@ test('LG: kobler til, capabilities, feil, slå på, apper og ny paring', async (
   const connect = await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42', name: 'Stue' } });
   assert.deepEqual(connect.json.device, { type: 'lg', host: '192.168.1.42', name: 'Stue' });
   assert.equal(connect.json.ready, true);
-  assert.equal(connect.json.capabilities.playPause, 'separate');
+  assert.equal(connect.json.capabilities.playPause, 'single');
   assert.equal(connect.json.capabilities.inputs, true);
   for (const key of ['Num0', 'Red', 'Blue', 'Guide', 'Settings', 'Info']) assert.ok(connect.json.capabilities.keys.includes(key), key);
   assert.equal((await post('/api/command', { key: 'Up' })).status, 200);

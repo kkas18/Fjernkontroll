@@ -22,6 +22,7 @@ test('alle kommandoer støttes av minst én TV-type, og capabilities stemmer med
   for (const key of ROKU_EXTRA_KEYS) assert.ok(ROKU_KEYS[key], `Roku mangler ${key}`);
   for (const key of LG_EXTRA_KEYS) assert.ok(lgSupports(key), `LG mangler ${key}`);
   assert.equal(ROKU_KEYS.Num7, 'Lit_7');
+  assert.equal(ROKU_KEYS.PlayPause, 'Play', 'Roku har én play/pause-tast');
   assert.equal(LG_BUTTONS.Guide, 'PROGRAM');
   assert.equal(LG_BUTTONS.Settings, 'MENU');
   assert.equal(LG_BUTTONS.Red, 'RED');

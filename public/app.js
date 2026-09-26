@@ -1,7 +1,7 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
 import {
   BRIDGE_DOWN, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
-  normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, transportMode, typeLabel,
+  normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, typeLabel,
 } from './logic.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -162,8 +162,6 @@ function render() {
   $('#powerOpen').disabled = !device;
   $('#textOpen').disabled = !device;
 
-  const mode = transportMode(capabilities);
-  $$('[data-transport]').forEach((el) => { el.hidden = el.dataset.transport !== mode; });
   $('#channelRocker').classList.toggle('is-unused', capabilities?.channels === false);
   applyCapabilities(capabilities);
 
@@ -712,13 +710,13 @@ $('#powerOn').addEventListener('click', async () => {
 
 const KEYBOARD = {
   ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Select', Backspace: 'Back',
-  '+': 'VolumeUp', '-': 'VolumeDown', m: 'Mute',
+  '+': 'VolumeUp', '-': 'VolumeDown', m: 'Mute', ' ': 'PlayPause', k: 'PlayPause',
   ...Object.fromEntries(Array.from({ length: 10 }, (_, n) => [String(n), `Num${n}`])),
 };
 document.addEventListener('keydown', (event) => {
   if (document.querySelector('dialog[open]') || event.target.closest('input, textarea, select')) return;
   // Enter på en fokusert knapp skal trykke den knappen, ikke sende OK til TV-en.
-  if (event.key === 'Enter' && event.target.closest('button, summary')) return;
+  if ((event.key === 'Enter' || event.key === ' ') && event.target.closest('button, summary')) return;
   const key = KEYBOARD[event.key];
   if (key?.startsWith('Num') && !supports(state.capabilities, key)) return;
   if (key && state.device) {

@@ -61,7 +61,13 @@ class Bridge(
     private suspend fun rokuReachable(device: Device): Boolean {
         val (host, ok, at) = rokuHealth
         if (host == device.host && System.currentTimeMillis() - at < rokuHealthTtlMs) return ok
-        val reachable = runCatching { withContext(Dispatchers.IO) { Roku.probe(device.host, 1500) } }.isSuccess
+        val reachable = try {
+            withContext(Dispatchers.IO) { Roku.probe(device.host, 1500) }
+            true
+        } catch (e: Exception) {
+            e.rethrowCancellation()
+            false
+        }
         rokuHealth = Triple(device.host, reachable, System.currentTimeMillis())
         return reachable
     }
@@ -73,15 +79,16 @@ class Bridge(
     private suspend fun <T> withRoku(action: () -> T): T = try {
         withContext(Dispatchers.IO) { action() }.also { markRoku(true) }
     } catch (e: Throwable) {
+        e.rethrowCancellation()
         if (e !is UserError) markRoku(false)
         throw e
     }
 
     private fun capabilities(device: Device) = if (device.type == "roku") {
-        JSONObject().put("playPause", "toggle").put("channels", device.isTv != false).put("powerOn", device.isTv == true).put("apps", true)
+        JSONObject().put("playPause", "single").put("channels", device.isTv != false).put("powerOn", device.isTv == true).put("apps", true)
             .put("inputs", device.isTv != false).put("search", "youtube").put("keys", JSONArray(Roku.EXTRA_KEYS))
     } else {
-        JSONObject().put("playPause", "separate").put("channels", true).put("powerOn", lg.canWake).put("apps", true)
+        JSONObject().put("playPause", "single").put("channels", true).put("powerOn", lg.canWake).put("apps", true)
             .put("inputs", true).put("search", "youtube").put("keys", JSONArray(LgSession.EXTRA_KEYS))
     }
 
@@ -120,6 +127,7 @@ class Bridge(
     suspend fun handle(route: String, body: String?): Pair<Int, JSONObject> = try {
         200 to dispatch(route, body?.let { JSONObject(it) })
     } catch (e: Throwable) {
+        e.rethrowCancellation()
         val message = toUserMessage(e)
         if (message.internal) log("Feil i $route: ${e.stackTraceToString()}")
         message.status to JSONObject().put("error", message.message)

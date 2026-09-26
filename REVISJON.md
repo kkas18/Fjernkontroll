@@ -104,3 +104,31 @@ Knapper TV-en ikke har, skjules automatisk ut fra `capabilities.keys`, som broen
 | Før (brukerens telefon) | Etter | 123 | Mer | Kilde | Skriv og søk | Roku |
 | --- | --- | --- | --- | --- | --- | --- |
 | ![](docs/revisjon/runde4/00-for-telefon.jpg) | ![](docs/revisjon/runde4/01-lg-412x915.png) | ![](docs/revisjon/runde4/02-taster.png) | ![](docs/revisjon/runde4/03-mer.png) | ![](docs/revisjon/runde4/04-kilde.png) | ![](docs/revisjon/runde4/05-skriv-og-sok.png) | ![](docs/revisjon/runde4/07-roku.png) |
+
+---
+
+## Runde 5 (v2.5.0): kompakt, én spill/pause-knapp og ECC-agenter
+
+**Brukerens ønsker:** én knapp for spill av og pause, en mer kompakt app og ikke noe «AI-design».
+
+### Endringer
+- **Én ⏯-knapp:** På LG spør broen TV-en om avspillingsstatus (`com.webos.media/getForegroundAppInfo`) og sender pause eller play etter det. Svarer ikke TV-en, veksler den lokalt. Roku har én play/pause-tast. Mellomrom og `k` på tastatur virker også.
+- **Kompakt:** Alt er samlet i én blokk ved tommelen. Snarveier og knappegrupper har ikon og tekst på samme linje (40–48 px). Den synlige «Favoritter»-overskriften er fjernet, fordi ikonene sier det selv. Topplinjen er 56 px, og avspillingslinjen har tre knapper.
+- **AI-mønstre** (ECC `design-system`): ingen gradienter, ingen «eyebrows» eller slagord, ingen kort i kort og ingen dekorative piler. Farger brukes bare der de betyr noe: OK, fargetastene og appikonene.
+
+### ECC brukt i denne runden
+
+| ECC | Funn | Tiltak |
+| --- | --- | --- |
+| `click-path-audit` (skill) | Gikk gjennom alle knapper: favoritter, stjerne, nytt navn, søk, skriv, kilde, strøm, par på nytt, ⏯. Funn: mellomrom på en fokusert knapp ville sendt ⏯ **i tillegg** til knappens egen handling. | Mellomrom og Enter på fokuserte knapper går bare til knappen. |
+| `kotlin-reviewer` (agent) | **HIGH:** `catch (e: Throwable/Exception)` og `runCatching` i `suspend`-kode fanget opp `CancellationException`, så coroutines ikke kunne avbrytes (Bridge, LgSession). **MEDIUM:** `!!` i `Validate.device`. | `rethrowCancellation()` i alle catch-blokker. Våre egne `withTimeout` håndteres fortsatt som vanlige tidsavbrudd. Null-sjekk i stedet for `!!`. |
+| `silent-failure-hunter` (agent) | Et ikon som ikke kunne hentes, ga 404 i appen uten spor. | Årsaken skrives i feilsøkingsloggen. |
+
+### Verifisering
+- `npm run verify`: **73/73**. Nye tester: ⏯ følger TV-ens status (spiller → pause, pauset → play), og veksler lokalt når TV-en ikke svarer. Roku: ⏯ → `Play`.
+- `./gradlew testDebugUnitTest assembleRelease`: **15/15**, APK 2.5.0.
+- Chromium, 412×915 og 360×800: ingen rulling, ingen kuttede etiketter, ingen konsollfeil.
+
+| 412×915 | 360×800 |
+| --- | --- |
+| ![](docs/revisjon/runde5/01-lg-412x915.png) | ![](docs/revisjon/runde5/06-lg-360x800.png) |

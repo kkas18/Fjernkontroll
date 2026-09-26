@@ -5,7 +5,7 @@ object Validate {
     val COMMANDS = setOf(
         "Up", "Down", "Left", "Right", "Select", "Back", "Home",
         "VolumeUp", "VolumeDown", "Mute", "PowerOff",
-        "Play", "Pause", "Rewind", "FastForward", "ChannelUp", "ChannelDown",
+        "Play", "Pause", "PlayPause", "Rewind", "FastForward", "ChannelUp", "ChannelDown",
         "PowerOn", "Backspace", "Enter",
         "Num0", "Num1", "Num2", "Num3", "Num4", "Num5", "Num6", "Num7", "Num8", "Num9",
         "Red", "Green", "Yellow", "Blue",
@@ -28,12 +28,12 @@ object Validate {
     }
 
     fun device(type: String?, host: String?, name: String?): Device {
-        if ((type != "roku" && type != "lg") || !isPrivateIPv4(host)) {
+        if ((type != "roku" && type != "lg") || host == null || !isPrivateIPv4(host)) {
             throw UserError("Oppgi en gyldig lokal IP-adresse og TV-type.")
         }
         val fallback = if (type == "lg") "LG webOS" else "Roku"
         val clean = name?.trim()?.take(70).orEmpty().ifEmpty { fallback }
-        return Device(type, host!!, clean)
+        return Device(type, host, clean)
     }
 
     fun command(key: String?): String {

@@ -12,7 +12,7 @@ const HOST = '192.168.1.42';
 const TV_CERT = 'AA:BB:CC';
 
 // Etterligner en LG-TV: svarer på registrering, pekersocket og SSAP-kall.
-function fakeTv({ failSecure = false, failAll = false, approve = true, muted = false, fingerprint = TV_CERT, pointerDenied = false } = {}) {
+function fakeTv({ failSecure = false, failAll = false, approve = true, muted = false, fingerprint = TV_CERT, pointerDenied = false, playState = null } = {}) {
   const opened = [];
   const sockets = [];
   const sent = { control: [], pointer: [] };
@@ -46,6 +46,8 @@ function fakeTv({ failSecure = false, failAll = false, approve = true, muted = f
       else if (uri.endsWith('getExternalInputList')) reply({ type: 'response', id: message.id, payload: { devices: [
         { id: 'HDMI_1', label: 'HDMI 1', connected: true }, { id: 'HDMI_2', label: 'PlayStation', connected: false }, { id: 'bad id!', label: 'x' },
       ] } });
+      else if (uri.endsWith('com.webos.media/getForegroundAppInfo') && !playState) reply({ type: 'error', id: message.id, error: '404 no such service' });
+      else if (uri.endsWith('com.webos.media/getForegroundAppInfo')) reply({ type: 'response', id: message.id, payload: { foregroundAppInfo: [{ playState }] } });
       else if (uri.endsWith('getSystemInfo')) reply({ type: 'response', id: message.id, payload: { modelName: 'OLED55C14LB' } });
       else if (uri.endsWith('channelUp')) reply({ type: 'error', id: message.id, error: '401 insufficient permissions' });
       else reply({ type: 'response', id: message.id, payload: { returnValue: true } });
@@ -300,5 +302,22 @@ test('innganger: bare gyldige id-er, og bare kjente innganger kan velges', async
   await lg.switchInput('HDMI_2');
   assert.deepEqual(JSON.parse(tv.sent.control.at(-1)).payload, { inputId: 'HDMI_2' });
   await assert.rejects(lg.switchInput('HDMI_9'), UserError);
+});
+
+test('én knapp for spill av / pause: følger TV-ens avspillingsstatus', async () => {
+  const playing = await readySession({ tv: { playState: 'playing' } });
+  await playing.lg.command('PlayPause');
+  assert.equal(JSON.parse(playing.tv.sent.control.at(-1)).uri, 'ssap://media.controls/pause');
+  const paused = await readySession({ tv: { playState: 'paused' } });
+  await paused.lg.command('PlayPause');
+  assert.equal(JSON.parse(paused.tv.sent.control.at(-1)).uri, 'ssap://media.controls/play');
+});
+
+test('én knapp for spill av / pause: veksler lokalt når TV-en ikke oppgir status', async () => {
+  const { tv, lg } = await readySession();
+  await lg.command('PlayPause');
+  assert.equal(JSON.parse(tv.sent.control.at(-1)).uri, 'ssap://media.controls/play');
+  await lg.command('PlayPause');
+  assert.equal(JSON.parse(tv.sent.control.at(-1)).uri, 'ssap://media.controls/pause');
 });
 

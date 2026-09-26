@@ -137,6 +137,8 @@ class BridgeLogicTest {
         assertEquals("MENU", LgSession.BUTTONS["Settings"])
         assertEquals("7", LgSession.BUTTONS["Num7"])
         assertEquals("Lit_7", Roku.KEYS["Num7"])
+        assertEquals("Play", Roku.KEYS["PlayPause"])
+        assertTrue(Validate.COMMANDS.contains("PlayPause"))
         assertFalse(Roku.KEYS.containsKey("Red"))
     }
 

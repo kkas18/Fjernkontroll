@@ -13,7 +13,7 @@ object Roku {
         "Up" to "Up", "Down" to "Down", "Left" to "Left", "Right" to "Right", "Select" to "Select",
         "Back" to "Back", "Home" to "Home", "VolumeUp" to "VolumeUp", "VolumeDown" to "VolumeDown",
         "Mute" to "VolumeMute", "PowerOff" to "PowerOff", "PowerOn" to "PowerOn",
-        "Play" to "Play", "Pause" to "Play", "Rewind" to "Rev", "FastForward" to "Fwd",
+        "Play" to "Play", "Pause" to "Play", "PlayPause" to "Play", "Rewind" to "Rev", "FastForward" to "Fwd",
         "ChannelUp" to "ChannelUp", "ChannelDown" to "ChannelDown", "Backspace" to "Backspace", "Enter" to "Enter",
         "Info" to "Info", "Search" to "Search", "Replay" to "InstantReplay",
     ) + (0..9).associate { "Num$it" to "Lit_$it" }

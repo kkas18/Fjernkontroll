@@ -145,11 +145,11 @@ export function createBridge({
   function capabilities() {
     if (selected.type === 'roku') {
       return {
-        playPause: 'toggle', channels: selected.isTv !== false, powerOn: selected.isTv === true, apps: true,
+        playPause: 'single', channels: selected.isTv !== false, powerOn: selected.isTv === true, apps: true,
         inputs: selected.isTv !== false, search: 'youtube', keys: [...ROKU_EXTRA_KEYS],
       };
     }
-    return { playPause: 'separate', channels: true, powerOn: lg.canWake, apps: true, inputs: true, search: 'youtube', keys: [...LG_EXTRA_KEYS] };
+    return { playPause: 'single', channels: true, powerOn: lg.canWake, apps: true, inputs: true, search: 'youtube', keys: [...LG_EXTRA_KEYS] };
   }
 
   async function status() {

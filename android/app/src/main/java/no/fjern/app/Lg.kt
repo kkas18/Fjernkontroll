@@ -140,6 +140,7 @@ class LgSession(
     @Volatile var code: String? = null; private set
     @Volatile var canWake = false; private set
     @Volatile var model: String? = null; private set
+    private var lastPlay = false
 
     private var generation = 0
     private var control: Socket? = null
@@ -283,6 +284,7 @@ class LgSession(
             } catch (e: CertificateMismatch) {
                 throw e
             } catch (e: Throwable) {
+                e.rethrowCancellation()
                 last = e
                 log("LG: $url feilet (${e.message})")
             }
@@ -300,6 +302,7 @@ class LgSession(
                 keyStore.update(target, mac = mac)
             }
         } catch (e: Exception) {
+            e.rethrowCancellation()
             log("LG: fant ikke MAC-adresse (${e.message})")
         }
     }
@@ -308,6 +311,7 @@ class LgSession(
         val path = try {
             request("ssap://com.webos.service.networkinput/getPointerInputSocket")?.optString("socketPath")
         } catch (e: Exception) {
+            e.rethrowCancellation()
             log("LG: pekersocket avvist (${e.message})")
             null
         }
@@ -339,6 +343,7 @@ class LgSession(
                 rememberModel()
             }
         } catch (e: Exception) {
+            e.rethrowCancellation()
             log("LG: pekersocket feilet (${e.message})")
             if (current(gen)) status = POINTER_LOST
         }
@@ -416,6 +421,7 @@ class LgSession(
             }
             return
         } catch (e: Throwable) {
+            e.rethrowCancellation()
             if (!current(gen)) return
             if (auto != null) scheduleReconnect(target, auto.attempt + 1, auto.delays, auto.message) else status = UNREACHABLE
             return
@@ -476,12 +482,30 @@ class LgSession(
     suspend fun command(key: String) = withContext(state) {
         if (!ready) throw UserError(status, 409)
         BUTTONS[key]?.let { return@withContext pressButton(it) }
+        if (key == "PlayPause") {
+            // Én knapp: spør TV-en om noe spilles av, og send pause eller play etter det.
+            var playing = lastPlay
+            try {
+                val state = request("ssap://com.webos.media/getForegroundAppInfo")
+                    ?.optJSONArray("foregroundAppInfo")?.optJSONObject(0)?.optString("playState")
+                if (!state.isNullOrEmpty()) playing = state == "playing"
+            } catch (e: Exception) {
+                e.rethrowCancellation()
+                log("LG: fant ikke avspillingsstatus (${e.message}), veksler lokalt")
+            }
+            val next = if (playing) "Pause" else "Play"
+            val (uri, payload) = REQUESTS.getValue(next)
+            request(uri, payload)
+            lastPlay = next == "Play"
+            return@withContext
+        }
         if (key == "Mute") {
             // Les faktisk lydstatus, slik at appen ikke kommer i utakt med den vanlige fjernkontrollen.
             try {
                 val muted = request("ssap://audio/getStatus")?.optBoolean("mute") ?: false
                 request("ssap://audio/setMute", JSONObject().put("mute", !muted))
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                e.rethrowCancellation()
                 pressButton("MUTE")
             }
             return@withContext
@@ -538,6 +562,7 @@ class LgSession(
             val name = request("ssap://system/getSystemInfo")?.optString("modelName")?.trim()?.take(40)
             if (!name.isNullOrEmpty()) model = "LG $name"
         } catch (e: Exception) {
+            e.rethrowCancellation()
             log("LG: fant ikke modellnavn (${e.message})")
         }
     }
@@ -551,6 +576,7 @@ class LgSession(
             try {
                 fetchIcon(parsed)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 // TV-er som bare har kryptert port, serverer de samme ressursene på https://…:3001.
                 if (parsed.isHttps) throw e
                 fetchIcon(parsed.newBuilder().scheme("https").port(3001).build())

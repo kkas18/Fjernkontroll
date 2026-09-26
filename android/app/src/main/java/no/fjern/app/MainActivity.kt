@@ -167,6 +167,8 @@ class MainActivity : ComponentActivity() {
                 val (type, bytes) = runBlocking { bridge.icon(Uri.decode(path)) }
                 WebResourceResponse(type, null, 200, "OK", SECURITY_HEADERS + ("Cache-Control" to "private, max-age=86400"), ByteArrayInputStream(bytes))
             } catch (e: Exception) {
+                // Ikke stille: grunnen havner i feilsøkingsloggen, så manglende ikoner kan forklares.
+                Diagnostics.add("Ikon $path: ${e.message}")
                 WebResourceResponse("text/plain", "utf-8", 404, "Not Found", SECURITY_HEADERS, ByteArrayInputStream(ByteArray(0)))
             }
         }
