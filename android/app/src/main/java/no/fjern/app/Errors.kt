@@ -7,6 +7,14 @@ import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 
 /** Feil som er ment for brukeren. Alt annet oversettes til en generell norsk melding. */
+/**
+ * Kaster ekte avbrytelser videre (coroutine avbrutt), men lar våre egne tidsavbrudd
+ * (withTimeout) håndteres som vanlige feil. Brukes først i catch-blokker i suspend-kode.
+ */
+fun Throwable.rethrowCancellation() {
+    if (this is kotlinx.coroutines.CancellationException && this !is kotlinx.coroutines.TimeoutCancellationException) throw this
+}
+
 class UserError(message: String, val status: Int = 400) : Exception(message)
 
 data class UserMessage(val status: Int, val message: String, val internal: Boolean)

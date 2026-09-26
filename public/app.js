@@ -1,6 +1,7 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
 import {
-  BRIDGE_DOWN, isPrivateIPv4, isValidDevice, newDevices, noticeFor, rememberDevice, sameDevice, transportMode, typeLabel,
+  addRecent, BRIDGE_DOWN, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
+  normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, typeLabel,
 } from './logic.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -136,15 +137,16 @@ function announce() {
   const key = state.ready && state.device ? `${state.device.type}:${state.device.host}` : null;
   if (key === state.announcedReady) return;
   state.announcedReady = key;
-  if (key) $('#announce').textContent = `Tilkoblet ${state.device.name}.`;
+  if (key) $('#announce').textContent = `Tilkoblet ${displayName(state.device, state.saved)}.`;
 }
 
 function render() {
   const { device, ready, bridge, capabilities } = state;
-  $('#deviceName').textContent = device?.name || 'Ingen TV';
+  const name = device ? displayName(device, state.saved) : 'Ingen TV';
+  $('#deviceName').textContent = name;
   $('#deviceMeta').hidden = !device;
-  $('#deviceMeta').textContent = device ? `${typeLabel(device.type)} · ${device.host}` : '';
-  $('#deviceButton').setAttribute('aria-label', device ? `${device.name}. Bytt TV` : 'Velg TV');
+  $('#deviceMeta').textContent = device ? device.host : '';
+  $('#deviceButton').setAttribute('aria-label', device ? `${name}, ${typeLabel(device.type)} på ${device.host}. Bytt TV` : 'Velg TV');
   $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code ? 'err' : 'busy') : 'off';
 
   const notice = noticeFor(state);
@@ -156,32 +158,132 @@ function render() {
   $('#noticeAction').dataset.action = notice.action?.id || '';
 
   $('#remote').hidden = !device;
+  $('#homeTop').hidden = !device || capabilities?.search !== 'youtube';
   $('#empty').hidden = Boolean(device);
   $('#powerOpen').disabled = !device;
   $('#textOpen').disabled = !device;
 
-  const mode = transportMode(capabilities);
-  $$('[data-transport]').forEach((el) => { el.hidden = el.dataset.transport !== mode; });
   $('#channelRocker').classList.toggle('is-unused', capabilities?.channels === false);
+  applyCapabilities(capabilities);
 
   renderApps();
   announce();
+}
+
+// Favoritter lagres per TV i brukerens rekkefølge.
+const deviceKey = (device) => `${device.type}:${device.host}`;
+function storedFavorites() {
+  return state.device ? storage.read('fjern-favorites', {})[deviceKey(state.device)] : undefined;
+}
+function saveFavorites(ids) {
+  const all = storage.read('fjern-favorites', {});
+  all[deviceKey(state.device)] = ids;
+  storage.write('fjern-favorites', all);
+}
+
+// Ikonet hentes fra TV-en via broen. Til det er lastet (eller hvis det mangler) vises forbokstaver.
+function appIcon(app, size = 'm') {
+  const box = document.createElement('span');
+  box.className = `app-icon ${size}`;
+  box.style.setProperty('--app-color', fallbackColor(app));
+  box.setAttribute('aria-hidden', 'true');
+  box.textContent = initials(app.name);
+  const img = document.createElement('img');
+  img.alt = '';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.src = `/api/icon/${encodeURIComponent(app.id)}?tv=${encodeURIComponent(state.device?.host || '')}`;
+  img.addEventListener('load', () => box.classList.add('has-image'));
+  img.addEventListener('error', () => img.remove());
+  box.append(img);
+  return box;
+}
+
+function favTile(label, icon, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'fav';
+  const text = document.createElement('span');
+  text.className = 'fav-label';
+  text.textContent = label;
+  button.append(icon, text);
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+// Taster og funksjoner TV-en ikke har, skjules. Talltaster og fargetaster beholder plassen sin
+// (så rutenettet ikke hopper), resten fjernes helt.
+function supports(capabilities, cap) {
+  if (!capabilities) return false;
+  if (cap in capabilities) return Boolean(capabilities[cap]);
+  return Array.isArray(capabilities.keys) && capabilities.keys.includes(cap);
+}
+function applyCapabilities(capabilities) {
+  for (const el of $$('[data-cap]')) {
+    const ok = supports(capabilities, el.dataset.cap);
+    if (el.classList.contains('num')) el.classList.toggle('is-unavailable', !ok);
+    else el.hidden = !ok;
+  }
+  $('.color-keys').hidden = !$$('.color-keys [data-cap]').some((el) => !el.hidden);
 }
 
 function renderApps() {
   const visible = state.ready && state.apps.length > 0;
   $('#apps').hidden = !visible;
   if (!visible) return;
-  const tiles = state.apps.map((app) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'app-tile';
-    button.textContent = app.name;
-    button.title = app.name;
-    button.addEventListener('click', () => launch(app, button));
-    return button;
+  const favorites = favoriteApps(state.apps, storedFavorites());
+  const tiles = favorites.map((app) => {
+    const tile = favTile(app.name, appIcon(app), () => launch(app, tile));
+    return tile;
   });
+  const allIcon = document.createElement('span');
+  allIcon.className = 'app-icon m all';
+  allIcon.setAttribute('aria-hidden', 'true');
+  allIcon.append(svgIcon('grid'));
+  tiles.push(favTile('Alle apper', allIcon, openAllApps));
   $('#appGrid').replaceChildren(...tiles);
+}
+
+function appRow(app, favoriteIds) {
+  const li = document.createElement('li');
+  li.className = 'app-row';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'app-open';
+  const name = document.createElement('span');
+  name.textContent = app.name;
+  open.append(appIcon(app, 's'), name);
+  open.addEventListener('click', () => {
+    $('#appsSheet').close();
+    launch(app, null);
+  });
+  const star = document.createElement('button');
+  star.type = 'button';
+  star.className = 'app-star';
+  const isFavorite = favoriteIds.includes(app.id);
+  star.setAttribute('aria-pressed', String(isFavorite));
+  star.setAttribute('aria-label', isFavorite ? `Fjern ${app.name} fra favoritter` : `Legg ${app.name} til favoritter`);
+  star.append(svgIcon('star'));
+  star.addEventListener('click', () => {
+    saveFavorites(toggleFavorite(state.apps, storedFavorites(), app.id));
+    renderAllApps();
+    renderApps();
+  });
+  li.append(open, star);
+  return li;
+}
+
+function renderAllApps() {
+  const favoriteIds = favoriteApps(state.apps, storedFavorites()).map((app) => app.id);
+  const { regular, system } = sortApps(state.apps);
+  $('#allApps').replaceChildren(...regular.map((app) => appRow(app, favoriteIds)));
+  $('#systemApps').replaceChildren(...system.map((app) => appRow(app, favoriteIds)));
+  $('#systemAppsTitle').hidden = system.length === 0;
+}
+
+function openAllApps() {
+  renderAllApps();
+  $('#appsSheet').showModal();
 }
 
 function deviceItem(device, { stored }) {
@@ -193,7 +295,7 @@ function deviceItem(device, { stored }) {
   select.className = 'device-select';
   if (sameDevice(device, state.device)) select.setAttribute('aria-current', 'true');
   const name = document.createElement('strong');
-  name.textContent = device.name;
+  name.textContent = displayName(device, state.saved);
   const detail = document.createElement('small');
   detail.className = 'mono';
   detail.textContent = `${typeLabel(device.type)} · ${device.host}`;
@@ -205,6 +307,14 @@ function deviceItem(device, { stored }) {
   li.append(select);
 
   if (stored) {
+    const rename = document.createElement('button');
+    rename.type = 'button';
+    rename.className = 'device-remove';
+    rename.setAttribute('aria-label', `Gi ${displayName(device, state.saved)} nytt navn`);
+    rename.append(svgIcon('edit'));
+    rename.addEventListener('click', () => askRename(device));
+    li.append(rename);
+
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'device-remove';
@@ -284,7 +394,9 @@ async function refreshStatus() {
     if (state.connecting) return;
     if (status.device) {
       applyStatus(status);
-      if (status.ready && !state.saved.some((d) => sameDevice(d, status.device))) remember(status.device);
+      const saved = state.saved.find((d) => sameDevice(d, status.device));
+      // Nytt navn fra TV-en (f.eks. modellnavn) oppdaterer listen, men aldri brukerens eget navn.
+      if (status.ready && (!saved || saved.name !== normalizeName(status.device))) remember(status.device);
     } else if (state.device) {
       // Broen er startet på nytt og har glemt TV-en. Behold valget og tilby ny tilkobling.
       state.ready = false;
@@ -335,6 +447,15 @@ async function launch(app, button) {
   try {
     await api('launch', { id: app.id });
     flash(button, 'is-sent', 200);
+    if (state.nowPlaying) {
+      state.nowPlaying = null;
+      renderNowPlaying();
+    }
+    // Engangshint: YouTube på TV-en er tungvint å søke i med fjernkontrollen.
+    if (/youtube/i.test(app.name) && !storage.read('fjern-hint-yt', false)) {
+      storage.write('fjern-hint-yt', true);
+      setTimeout(() => toast('Tips: Søk enklere fra mobilen med «Søk på YouTube» øverst.'), 600);
+    }
   } catch (error) {
     flash(button, 'is-failed', 600);
     toast(error.message);
@@ -391,10 +512,18 @@ function openDevices({ scanNow = false } = {}) {
   if (scanNow) scan();
 }
 
+let renaming = null;
+function askRename(device) {
+  renaming = device;
+  $('#renameInput').value = state.saved.find((d) => sameDevice(d, device))?.customName || '';
+  $('#renameDialog').showModal();
+  $('#renameInput').focus();
+}
+
 let removing = null;
 function askRemove(device) {
   removing = device;
-  $('#removeText').textContent = `${device.name} fjernes fra listen. Du kan legge den til igjen senere.`;
+  $('#removeText').textContent = `${displayName(device, state.saved)} fjernes fra listen. Du kan legge den til igjen senere.`;
   $('#removeDialog').showModal();
 }
 
@@ -429,6 +558,49 @@ $('#noticeAction').addEventListener('click', (event) => {
   else connect(state.device);
 });
 
+$('#diagOpen').addEventListener('click', async () => {
+  let text;
+  try {
+    const { about, lines } = await api('diagnostics');
+    const status = `Status: ${state.ready ? 'klar' : 'ikke klar'} · ${state.message || '–'} · kode ${state.code || '–'}`;
+    const device = state.device ? `TV: ${typeLabel(state.device.type)} ${state.device.host}` : 'TV: ingen valgt';
+    text = [about, device, status, '', ...(lines.length ? lines : ['(ingen hendelser ennå)'])].join('\n');
+  } catch (error) {
+    text = `Kunne ikke hente loggen: ${error.message}`;
+  }
+  $('#diagText').textContent = text;
+  $('#diagDialog').showModal();
+});
+$('#diagCopy').addEventListener('click', async () => {
+  const text = $('#diagText').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Kopiert.');
+  } catch {
+    // Reserve: marker teksten slik at brukeren kan kopiere den selv.
+    const range = document.createRange();
+    range.selectNodeContents($('#diagText'));
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    toast('Marker teksten og kopier den.');
+  }
+});
+
+$('#renameForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const customName = $('#renameInput').value.trim().slice(0, 40);
+  state.saved = state.saved.map((d) => {
+    if (!sameDevice(d, renaming)) return d;
+    const { customName: _old, ...rest } = d;
+    return customName ? { ...rest, customName } : rest;
+  });
+  persist();
+  $('#renameDialog').close();
+  renderLists();
+  render();
+});
+
 $('#removeConfirm').addEventListener('click', () => {
   if (removing) {
     state.saved = state.saved.filter((d) => !sameDevice(d, removing));
@@ -450,7 +622,7 @@ $('#manualForm').addEventListener('submit', (event) => {
   }
   $('#manualDialog').close();
   $('#devicesSheet').close();
-  connect({ type, host, name: `${typeLabel(type)} · ${host}` });
+  connect({ type, host, name: type === 'lg' ? 'LG-TV' : 'Roku' });
 });
 
 $('#textOpen').addEventListener('click', () => {
@@ -458,18 +630,285 @@ $('#textOpen').addEventListener('click', () => {
   $('#tvText').focus();
 });
 $('#textBackspace').addEventListener('click', (event) => send('Backspace', event.currentTarget));
+// ---------- YouTube: søk på mobilen, spill av på TV-en ----------
+
+const RECENT_KEY = 'fjern-yt-recent';
+const recentSearches = () => addRecent(storage.read(RECENT_KEY, []), '');
+const rememberSearch = (query) => storage.write(RECENT_KEY, addRecent(storage.read(RECENT_KEY, []), query));
+
+function renderRecent() {
+  const list = recentSearches();
+  const showRecent = list.length > 0 && !$('#ytResults').children.length;
+  $('#ytRecentBox').hidden = !showRecent;
+  $('#ytRecent').replaceChildren(...list.map((query) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.textContent = query;
+    chip.addEventListener('click', () => {
+      $('#ytQuery').value = query;
+      runSearch(query);
+    });
+    return chip;
+  }));
+}
+
+function thumbnail(id, className) {
+  const box = document.createElement('span');
+  box.className = className;
+  const img = document.createElement('img');
+  img.alt = '';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.src = `/api/ytthumb/${encodeURIComponent(id)}`;
+  img.addEventListener('error', () => img.remove());
+  box.append(img);
+  return box;
+}
+
+function videoRow(video) {
+  const li = document.createElement('li');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'yt-item';
+  button.setAttribute('aria-label', `Spill ${video.title} på TV-en`);
+  const thumb = thumbnail(video.id, 'yt-thumb');
+  if (video.duration) {
+    const badge = document.createElement('span');
+    badge.className = video.duration === 'Direkte' ? 'yt-duration live' : 'yt-duration';
+    badge.textContent = video.duration;
+    thumb.append(badge);
+  }
+  const textBox = document.createElement('span');
+  textBox.className = 'yt-text';
+  const title = document.createElement('span');
+  title.className = 'yt-title';
+  title.textContent = video.title;
+  const meta = document.createElement('span');
+  meta.className = 'yt-meta';
+  meta.textContent = [video.channel, video.views].filter(Boolean).join(' · ');
+  textBox.append(title, meta);
+  button.append(thumb, textBox);
+  button.addEventListener('click', () => playVideo(video, button));
+  li.append(button);
+  return li;
+}
+
+async function playVideo(video, button) {
+  haptic();
+  button?.classList.add('is-playing');
+  try {
+    await api('ytplay', { id: video.id });
+    state.nowPlaying = video;
+    renderNowPlaying();
+    toast('Spilles på TV-en.');
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button?.classList.remove('is-playing');
+  }
+}
+
+let searchToken = 0;
+async function runSearch(query) {
+  const q = query.trim();
+  if (!q) return;
+  const token = ++searchToken;
+  $('#ytQuery').blur(); // skjul mobiltastaturet så resultatene synes
+  rememberSearch(q);
+  $('#ytResults').replaceChildren();
+  $('#ytRecentBox').hidden = true;
+  $('#ytStatus').textContent = `Søker etter «${q}» …`;
+  try {
+    const { videos } = await api('ytsearch', { query: q });
+    if (token !== searchToken) return;
+    $('#ytStatus').textContent = videos.length ? '' : `Ingen treff for «${q}».`;
+    $('#ytResults').replaceChildren(...videos.map(videoRow));
+    $('.ytview-body').scrollTop = 0;
+  } catch (error) {
+    if (token === searchToken) $('#ytStatus').textContent = error.message;
+  }
+}
+
+// «Spilles nå»: liten linje med det som går på TV-en, både på forsiden og i YouTube-visningen.
+function nowBar(target) {
+  const video = state.nowPlaying;
+  target.hidden = !video;
+  if (!video) return target.replaceChildren();
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'nowbar-main';
+  open.setAttribute('aria-label', `Spilles nå: ${video.title}`);
+  const label = document.createElement('span');
+  label.className = 'nowbar-text';
+  const small = document.createElement('small');
+  small.textContent = 'Spilles nå';
+  const title = document.createElement('span');
+  title.textContent = video.title;
+  label.append(small, title);
+  open.append(thumbnail(video.id, 'nowbar-thumb'), label);
+  open.addEventListener('click', () => (target.id === 'nowYt' ? closeYouTube() : openYouTube()));
+  const play = document.createElement('button');
+  play.type = 'button';
+  play.className = 'nowbar-action';
+  play.setAttribute('aria-label', 'Spill av / pause');
+  play.append(svgIcon('playpause'));
+  play.addEventListener('click', () => send('PlayPause', play));
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'nowbar-action';
+  close.setAttribute('aria-label', 'Skjul «Spilles nå»');
+  close.append(svgIcon('close'));
+  close.addEventListener('click', () => {
+    state.nowPlaying = null;
+    renderNowPlaying();
+  });
+  target.replaceChildren(open, play, close);
+}
+function renderNowPlaying() {
+  nowBar($('#nowHome'));
+  nowBar($('#nowYt'));
+}
+
+function openYouTube({ focus = true } = {}) {
+  $('#ytView').hidden = false;
+  document.body.classList.add('yt-open');
+  renderRecent();
+  renderNowPlaying();
+  if (focus && !$('#ytResults').children.length) $('#ytQuery').focus();
+}
+function closeYouTube() {
+  $('#ytView').hidden = true;
+  document.body.classList.remove('yt-open');
+}
+
+// Talesøk: Android-appen bruker telefonens talegjenkjenning; Chrome har sin egen.
+const voicePending = new Map();
+let voiceId = 0;
+window.__fjernVoice = (id, text) => {
+  const resolve = voicePending.get(id);
+  voicePending.delete(id);
+  resolve?.(text || '');
+};
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const voiceAvailable = Boolean(native?.voiceAvailable?.()) || Boolean(SpeechRecognition);
+
+function listen() {
+  if (native?.voiceAvailable?.()) {
+    return new Promise((resolve) => {
+      const id = String(++voiceId);
+      voicePending.set(id, resolve);
+      native.voice(id);
+    });
+  }
+  return new Promise((resolve) => {
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'nb-NO';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => resolve(event.results[0]?.[0]?.transcript || '');
+    recognition.onerror = () => resolve('');
+    recognition.onend = () => resolve('');
+    recognition.start();
+  });
+}
+
+async function voiceSearch() {
+  openYouTube({ focus: false });
+  $('#ytStatus').textContent = 'Lytter … si hva du vil se.';
+  const text = (await listen()).trim();
+  if (!text) {
+    $('#ytStatus').textContent = 'Fikk ikke med meg det. Prøv igjen, eller skriv.';
+    return;
+  }
+  $('#ytQuery').value = text;
+  runSearch(text);
+}
+
+$('#searchOpen').addEventListener('click', (event) => {
+  if (event.target.closest('#searchPillMic')) voiceSearch();
+  else openYouTube();
+});
+$('#ytBack').addEventListener('click', closeYouTube);
+$('#ytMic').addEventListener('click', voiceSearch);
+$('#ytForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  runSearch($('#ytQuery').value);
+});
+$('#ytQuery').addEventListener('input', () => {
+  if (!$('#ytQuery').value) {
+    $('#ytResults').replaceChildren();
+    $('#ytStatus').textContent = '';
+    renderRecent();
+  }
+});
+$('#ytRecentClear').addEventListener('click', () => {
+  storage.write(RECENT_KEY, []);
+  renderRecent();
+});
+$('#ytMic').hidden = !voiceAvailable;
+$('#searchPillMic').hidden = !voiceAvailable;
+
+// ---------- Skriv på TV ----------
+
+// Teksten skrives i feltet som er åpent på TV-en; arket blir stående for mer skriving.
 $('#textForm').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const text = $('#tvText').value.trim();
-  if (!text) return;
+  const text = $('#tvText').value;
+  if (!text.trim()) {
+    $('#tvText').focus();
+    return;
+  }
   try {
     await api('text', { text });
     $('#tvText').value = '';
-    toast('Tekst sendt.');
+    toast('Tekst sendt til TV-en.');
   } catch (error) {
     toast(error.message);
   }
 });
+$('#textEnter').addEventListener('click', (event) => send('Enter', event.currentTarget));
+
+$('#numOpen').addEventListener('click', () => $('#numSheet').showModal());
+$('#moreOpen').addEventListener('click', () => $('#moreSheet').showModal());
+$('#inputOpen').addEventListener('click', async () => {
+  const list = $('#inputList');
+  list.replaceChildren(emptyItem('Henter innganger …'));
+  $('#inputSheet').showModal();
+  try {
+    const { inputs } = await api('inputs');
+    list.replaceChildren(...(inputs.length ? inputs.map(inputRow) : [emptyItem('Fant ingen innganger på TV-en.')]));
+  } catch (error) {
+    list.replaceChildren(emptyItem(error.message));
+  }
+});
+
+function inputRow(input) {
+  const li = document.createElement('li');
+  li.className = 'app-row';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'app-open';
+  if (!input.connected) button.classList.add('is-disconnected');
+  const icon = document.createElement('span');
+  icon.className = 'app-icon s all';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.append(svgIcon('hdmi'));
+  const name = document.createElement('span');
+  name.textContent = input.connected ? input.name : `${input.name} (ikke tilkoblet)`;
+  button.append(icon, name);
+  button.addEventListener('click', async () => {
+    try {
+      await api('input', { id: input.id });
+      $('#inputSheet').close();
+      toast(`Bytter til ${input.name}.`);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  li.append(button);
+  return li;
+}
 
 $('#powerOpen').addEventListener('click', openPower);
 $('#powerOff').addEventListener('click', () => {
@@ -484,12 +923,17 @@ $('#powerOn').addEventListener('click', async () => {
   }
 });
 
-const KEYBOARD = { ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Select', Backspace: 'Back', '+': 'VolumeUp', '-': 'VolumeDown', m: 'Mute' };
+const KEYBOARD = {
+  ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Select', Backspace: 'Back',
+  '+': 'VolumeUp', '-': 'VolumeDown', m: 'Mute', ' ': 'PlayPause', k: 'PlayPause',
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, n) => [String(n), `Num${n}`])),
+};
 document.addEventListener('keydown', (event) => {
-  if (document.querySelector('dialog[open]') || event.target.closest('input, textarea, select')) return;
+  if (document.querySelector('dialog[open]') || !$('#ytView').hidden || event.target.closest('input, textarea, select')) return;
   // Enter på en fokusert knapp skal trykke den knappen, ikke sende OK til TV-en.
-  if (event.key === 'Enter' && event.target.closest('button, summary')) return;
+  if ((event.key === 'Enter' || event.key === ' ') && event.target.closest('button, summary')) return;
   const key = KEYBOARD[event.key];
+  if (key?.startsWith('Num') && !supports(state.capabilities, key)) return;
   if (key && state.device) {
     event.preventDefault();
     send(key, document.querySelector(`[data-key="${key}"]:not([hidden])`));
@@ -511,14 +955,20 @@ document.addEventListener('visibilitychange', () => {
 // Android-tilbakeknappen lukker først et åpent ark.
 window.__fjernBack = () => {
   const open = document.querySelector('dialog[open]');
-  if (!open) return false;
-  open.close();
-  return true;
+  if (open) {
+    open.close();
+    return true;
+  }
+  if (!$('#ytView').hidden) {
+    closeYouTube();
+    return true;
+  }
+  return false;
 };
 
 if (!native && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
-state.saved = storage.read('fjern-devices', []).filter(isValidDevice);
+state.saved = storage.read('fjern-devices', []).filter(isValidDevice).map((d) => ({ ...d, name: normalizeName(d) }));
 const lastSelected = storage.read('fjern-selected', null);
 const previous = state.saved.find((d) => `${d.type}:${d.host}` === lastSelected);
 render();

@@ -13,9 +13,23 @@ object Roku {
         "Up" to "Up", "Down" to "Down", "Left" to "Left", "Right" to "Right", "Select" to "Select",
         "Back" to "Back", "Home" to "Home", "VolumeUp" to "VolumeUp", "VolumeDown" to "VolumeDown",
         "Mute" to "VolumeMute", "PowerOff" to "PowerOff", "PowerOn" to "PowerOn",
-        "Play" to "Play", "Pause" to "Play", "Rewind" to "Rev", "FastForward" to "Fwd",
-        "ChannelUp" to "ChannelUp", "ChannelDown" to "ChannelDown", "Backspace" to "Backspace",
-    )
+        "Play" to "Play", "Pause" to "Play", "PlayPause" to "Play", "Rewind" to "Rev", "FastForward" to "Fwd",
+        "ChannelUp" to "ChannelUp", "ChannelDown" to "ChannelDown", "Backspace" to "Backspace", "Enter" to "Enter",
+        "Info" to "Info", "Search" to "Search", "Replay" to "InstantReplay",
+    ) + (0..9).associate { "Num$it" to "Lit_$it" }
+    val EXTRA_KEYS = (0..9).map { "Num$it" } + listOf("Info", "Search", "Replay", "Enter")
+    /** YouTube-kanalen på Roku. */
+    const val YOUTUBE_ID = "837"
+
+    /** Spiller en YouTube-video direkte (dyplenke til YouTube-kanalen). */
+    fun playYoutube(host: String, videoId: String) {
+        val connection = open(host, "/launch/$YOUTUBE_ID?contentID=${URLEncoder.encode(videoId, "UTF-8")}&mediaType=movie", "POST", 4000)
+        try {
+            if (connection.responseCode !in 200..299) throw UserError("Roku kunne ikke spille videoen.", 502)
+        } finally {
+            connection.disconnect()
+        }
+    }
     const val MAX_RESPONSE_BYTES = 64 * 1024
 
     private fun open(host: String, path: String, method: String, timeoutMs: Int): HttpURLConnection {
@@ -52,7 +66,7 @@ object Roku {
     fun parseDeviceInfo(host: String, xml: String): Device {
         val raw = Regex("""<(?:user-device-name|friendly-device-name)>([^<]{1,120})</""", RegexOption.IGNORE_CASE).find(xml)?.groupValues?.get(1)
         val isTv = Regex("""<is-tv>\s*true\s*</is-tv>""", RegexOption.IGNORE_CASE).containsMatchIn(xml)
-        return Device("roku", host, raw?.let { decodeXml(it).trim() } ?: "Roku · $host", isTv)
+        return Device("roku", host, raw?.let { decodeXml(it).trim() } ?: "Roku", isTv)
     }
 
     fun probe(host: String, timeoutMs: Int = 2500): Device {
@@ -98,9 +112,11 @@ object Roku {
 
     fun parseApps(xml: String): List<App> {
         val apps = mutableListOf<App>()
-        for (match in Regex("""<app\s+id="([^"]{1,80})"[^>]*>([^<]{1,80})</app>""").findAll(xml)) {
+        for (match in Regex("""<app\s+id="([^"]{1,80})"([^>]*)>([^<]{1,80})</app>""").findAll(xml)) {
             try {
-                apps += App(Validate.appId(match.groupValues[1]), decodeXml(match.groupValues[2]).trim())
+                // type="tvin" er innganger (HDMI, antenne); de sorteres sammen med systemapper.
+                val type = Regex("""type="([^"]*)"""").find(match.groupValues[2])?.groupValues?.get(1)
+                apps += App(Validate.appId(match.groupValues[1]), decodeXml(match.groupValues[3]).trim(), system = type != null && type != "appl")
             } catch (_: UserError) {
                 // hopp over ugyldige id-er
             }
@@ -123,6 +139,16 @@ object Roku {
         val connection = open(host, "/launch/" + URLEncoder.encode(id, "UTF-8"), "POST", 4000)
         try {
             if (connection.responseCode !in 200..299) throw UserError("Roku kunne ikke åpne appen.", 502)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun icon(host: String, id: String): ByteArray {
+        val connection = open(host, "/query/icon/" + URLEncoder.encode(id, "UTF-8"), "GET", 3000)
+        try {
+            if (connection.responseCode !in 200..299) throw UserError("Roku ga ikke ut ikonet.", 502)
+            return connection.inputStream.use { Icons.readLimited(it) }
         } finally {
             connection.disconnect()
         }

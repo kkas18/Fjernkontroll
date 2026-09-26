@@ -14,8 +14,34 @@ class NativeBridge(
     private val webView: WebView,
     private val bridge: Bridge,
     private val scope: CoroutineScope,
+    private val voice: VoiceInput? = null,
 ) {
-    private val routes = setOf("status", "scan", "connect", "repair", "apps", "launch", "command", "text")
+    /** Talegjenkjenning levert av aktiviteten (telefonens eget talesøk). */
+    interface VoiceInput {
+        fun available(): Boolean
+        fun listen(onResult: (String?) -> Unit)
+    }
+
+    @JavascriptInterface
+    fun voiceAvailable(): Boolean = voice?.available() == true
+
+    /** Starter talesøk; svaret kommer via window.__fjernVoice(id, tekst). */
+    @JavascriptInterface
+    fun voice(id: String) {
+        val input = voice
+        if (input == null) {
+            deliverVoice(id, null)
+            return
+        }
+        webView.post { input.listen { text -> deliverVoice(id, text) } }
+    }
+
+    private fun deliverVoice(id: String, text: String?) {
+        val value = if (text == null) "null" else JSONObject.quote(text.take(100))
+        webView.post { webView.evaluateJavascript("window.__fjernVoice && window.__fjernVoice(${JSONObject.quote(id)}, $value)", null) }
+    }
+
+    private val routes = setOf("status", "scan", "connect", "repair", "apps", "launch", "command", "text", "diagnostics", "inputs", "input", "ytsearch", "ytplay")
 
     @JavascriptInterface
     fun request(id: String, route: String, body: String?) {

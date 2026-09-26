@@ -5,12 +5,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { UserError, toUserMessage } from './lib/errors.mjs';
-import { validAppId, validCommand, validDevice, validText } from './lib/validate.mjs';
-import { rokuApps, rokuCommand, rokuLaunch, rokuProbe, rokuText } from './lib/roku.mjs';
+import { validAppId, validCommand, validDevice, validInputId, validQuery, validText } from './lib/validate.mjs';
+import { ROKU_EXTRA_KEYS, rokuApps, rokuCommand, rokuIcon, rokuLaunch, rokuPlayYoutube, rokuProbe, rokuText } from './lib/roku.mjs';
+import { searchYoutube, thumbnailUrl, validVideoId } from './lib/youtube.mjs';
+import { createIconCache, fetchBytes, sniffImage } from './lib/icons.mjs';
 import { createDiscovery } from './lib/ssdp.mjs';
-import { createKeyStore, createLgSession } from './lib/lg.mjs';
+import { LG_EXTRA_KEYS, createKeyStore, createLgSession } from './lib/lg.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
 const MAX_BODY = 16_384;
 
 const MEDIA = new Map([
@@ -58,10 +61,22 @@ async function readJson(req) {
   return text ? JSON.parse(text) : {};
 }
 
+// De siste hendelsene i broen, slik at brukeren kan kopiere dem ved feilsøking. Ingen nøkler logges.
+function createDiagnostics(print, max = 150) {
+  const lines = [];
+  const log = (message) => {
+    lines.push(`${new Date().toTimeString().slice(0, 8)} ${message}`);
+    if (lines.length > max) lines.shift();
+    print(message);
+  };
+  return { log, lines };
+}
+
 export function createBridge({
   publicDir = path.join(root, 'public'),
   dataDir = path.join(root, 'data'),
-  log = (message) => console.log(message),
+  diagnostics = createDiagnostics((message) => console.log(message)),
+  log = diagnostics.log,
   fetchImpl = fetch,
   keyStore = createKeyStore(path.join(dataDir, 'lg-keys.json')),
   lg = createLgSession({ keyStore, log }),
@@ -71,9 +86,47 @@ export function createBridge({
   let selected = null;
   let rokuHealth = { host: null, ok: false, at: 0 };
   let rokuAppList = [];
+  const icons = createIconCache();
   keyStore.protect?.();
 
-  const publicDevice = (device) => device && { type: device.type, host: device.host, name: device.name };
+  // Standardnavn byttes ut med TV-ens modellnavn når det er kjent (brukerens egne navn settes i appen).
+  const DEFAULT_NAMES = /^(LG-TV|LG webOS|Roku)( · .*)?$/;
+  const publicDevice = (device) => {
+    if (!device) return device;
+    const model = device.type === 'lg' && lg.model;
+    const name = model && DEFAULT_NAMES.test(device.name) ? model : device.name;
+    return { type: device.type, host: device.host, name };
+  };
+
+  async function icon(id) {
+    if (!selected) throw new UserError('Velg en TV først.', 409);
+    const key = `${selected.type}:${selected.host}:${id}`;
+    const cached = icons.get(key);
+    if (cached) return cached;
+    let bytes;
+    if (selected.type === 'lg') {
+      const url = lg.iconUrl(id);
+      if (!url) throw new UserError('Fant ikke ikonet.', 404);
+      try {
+        bytes = await fetchBytes(url, { insecureTls: true });
+      } catch (error) {
+        // TV-er som bare har kryptert port, serverer de samme ressursene på https://…:3001.
+        const secure = new URL(url);
+        if (secure.protocol !== 'http:') throw error;
+        secure.protocol = 'https:';
+        secure.port = '3001';
+        bytes = await fetchBytes(secure.href, { insecureTls: true });
+      }
+    } else {
+      if (!rokuAppList.some((app) => app.id === id)) throw new UserError('Fant ikke ikonet.', 404);
+      bytes = await rokuIcon(selected.host, id, { fetchImpl });
+    }
+    const type = sniffImage(bytes);
+    if (!type) throw new UserError('Ikonet er ikke et bilde.', 415);
+    const result = { type, bytes };
+    icons.set(key, result);
+    return result;
+  }
 
   // Roku har ingen varig forbindelse, så vi spør TV-en jevnlig (bufret) om den svarer.
   async function rokuReachable() {
@@ -92,9 +145,12 @@ export function createBridge({
   // Hva grensesnittet skal vise for valgt TV.
   function capabilities() {
     if (selected.type === 'roku') {
-      return { playPause: 'toggle', channels: selected.isTv !== false, powerOn: selected.isTv === true, apps: true };
+      return {
+        playPause: 'single', channels: selected.isTv !== false, powerOn: selected.isTv === true, apps: true,
+        inputs: selected.isTv !== false, search: 'youtube', keys: [...ROKU_EXTRA_KEYS],
+      };
     }
-    return { playPause: 'separate', channels: true, powerOn: lg.canWake, apps: true };
+    return { playPause: 'single', channels: true, powerOn: lg.canWake, apps: true, inputs: true, search: 'youtube', keys: [...LG_EXTRA_KEYS] };
   }
 
   async function status() {
@@ -124,9 +180,42 @@ export function createBridge({
   }
 
   async function api(req, res, route) {
-    if (route === '/api/status' || route === '/api/apps') {
+    if (route.startsWith('/api/ytthumb/')) {
+      if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
+      const id = validVideoId(route.slice('/api/ytthumb/'.length));
+      let cached = icons.get(`yt:${id}`);
+      if (!cached) {
+        const bytes = await fetchBytes(thumbnailUrl(id));
+        const type = sniffImage(bytes);
+        if (!type) throw new UserError('Bildet er ikke et bilde.', 415);
+        cached = { type, bytes };
+        icons.set(`yt:${id}`, cached);
+      }
+      res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': cached.type, 'content-length': cached.bytes.length, 'cache-control': 'private, max-age=86400' });
+      return res.end(cached.bytes);
+    }
+    if (route.startsWith('/api/icon/')) {
+      if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
+      let id;
+      try { id = validAppId(decodeURIComponent(route.slice('/api/icon/'.length))); } catch { throw new UserError('Ukjent app.', 400); }
+      const { type, bytes } = await icon(id);
+      res.writeHead(200, { ...SECURITY_HEADERS, 'content-type': type, 'content-length': bytes.length, 'cache-control': 'private, max-age=86400' });
+      return res.end(bytes);
+    }
+    if (route === '/api/inputs') {
+      if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
+      if (!selected) throw new UserError('Velg en TV først.', 409);
+      if (selected.type === 'lg') return sendJson(res, 200, { inputs: await lg.inputs() });
+      // Roku: innganger er «apper» av typen tvin (HDMI, antenne).
+      if (!rokuAppList.length) rokuAppList = await withRoku(() => rokuApps(selected.host, { fetchImpl }));
+      return sendJson(res, 200, { inputs: rokuAppList.filter((app) => app.id.startsWith('tvinput.')).map(({ id, name }) => ({ id, name, connected: true })) });
+    }
+    if (route === '/api/status' || route === '/api/apps' || route === '/api/diagnostics') {
       if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
       if (route === '/api/status') return sendJson(res, 200, await status());
+      if (route === '/api/diagnostics') {
+        return sendJson(res, 200, { about: `Fjern ${version} · Node ${process.version} · ${process.platform}`, lines: diagnostics.lines.slice() });
+      }
       if (!selected) throw new UserError('Velg en TV først.', 409);
       const apps = selected.type === 'lg' ? await lg.apps() : await withRoku(() => rokuApps(selected.host, { fetchImpl }));
       if (selected.type === 'roku') rokuAppList = apps;
@@ -148,6 +237,7 @@ export function createBridge({
           markRoku(true);
         } else {
           selected = device;
+          log(`LG: kobler til ${device.host}`);
           await lg.connect(device.host);
         }
         return sendJson(res, 200, await status());
@@ -158,6 +248,25 @@ export function createBridge({
         await lg.forget(selected.host);
         await lg.connect(selected.host);
         return sendJson(res, 200, await status());
+      }
+      case '/api/input': {
+        if (!selected) throw new UserError('Velg en TV først.', 409);
+        const id = validInputId(input.id);
+        if (selected.type === 'lg') await lg.switchInput(id);
+        else {
+          if (!rokuAppList.some((app) => app.id === id && id.startsWith('tvinput.'))) throw new UserError('Ukjent inngang.', 404);
+          await withRoku(() => rokuLaunch(selected.host, id, { fetchImpl }));
+        }
+        return sendJson(res, 200, { ok: true });
+      }
+      case '/api/ytsearch':
+        return sendJson(res, 200, { videos: await searchYoutube(validQuery(input.query), { fetchImpl }) });
+      case '/api/ytplay': {
+        if (!selected) throw new UserError('Velg en TV først.', 409);
+        const id = validVideoId(input.id);
+        if (selected.type === 'lg') await lg.playYoutube(id);
+        else await withRoku(() => rokuPlayYoutube(selected.host, id, { fetchImpl }));
+        return sendJson(res, 200, { ok: true });
       }
       case '/api/launch': {
         if (!selected) throw new UserError('Velg en TV først.', 409);

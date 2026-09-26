@@ -8,6 +8,14 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Talesøk: Android 11+ må få vite at appen vil bruke telefonens talegjenkjenning.
+         Selve lyden håndteres av Google-appen, så appen trenger ikke mikrofontillatelse. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

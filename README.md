@@ -39,7 +39,8 @@ Oppdater med `cd ~/fjern && git pull`.
 - Navigasjon, OK, Hjem, Tilbake, volum, kanal (skjules på Roku-spillere uten TV), lyd av og avspilling. Hold inne piler og volum for å gjenta.
 - **Apper:** snarveier til appene på TV-en, hentet direkte fra TV-en.
 - **Slå på og av:** Roku-TV-er slås på med `PowerOn`. LG slås på med Wake-on-LAN når TV-en har vært tilkoblet én gang og **Slå på via Wi‑Fi** er aktivert på TV-en (ofte under *Mobil TV på*; plasseringen varierer per modell).
-- **Tekst:** send tekst til et aktivt tekstfelt, og slett tegn.
+- **YouTube:** trykk på «Søk på YouTube» øverst (eller 🎤 for talesøk), og se resultatene med bilder på mobilen. Trykk på en video, så spilles den på TV-en, og «Spilles nå» viser hva som går. Søket leser YouTubes offentlige søkeside gjennom broen, uten konto eller API-nøkkel. Talesøk bruker telefonens egen talegjenkjenning i Android-appen, og Chromes i nettversjonen.
+- **Skriv på TV (⌨):** skriv i tekstfeltet som er åpent på TV-en, for eksempel et passord, og slett tegn eller trykk Enter.
 - **Automatisk gjenoppkobling** for LG når forbindelsen faller ut, og helsesjekk for Roku.
 
 ## Krav

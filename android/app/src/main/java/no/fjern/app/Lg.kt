@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -55,19 +56,49 @@ class LgSession(
         const val UNREACHABLE = "Fikk ikke kontakt med LG TV. Sjekk at den er på og at IP-adressen stemmer."
         const val PAIRING_TIMEOUT = "Paringen ble ikke godkjent i tide. Velg TV-en og prøv igjen."
         const val REJECTED = "TV-en avviste paringen. Velg TV-en og prøv igjen."
-        const val NO_POINTER = "TV-en tilbyr ikke navigasjon via nettverket."
+        const val NO_POINTER = "TV-en ga ikke tilgang til navigasjon. Trykk «Par på nytt» og godkjenn forespørselen på TV-en."
         const val POINTER_LOST = "Navigasjonen ble frakoblet. Velg TV-en for å koble til igjen."
         const val LOST = "LG TV ble frakoblet. Velg TV-en for å koble til igjen."
         const val CERT_CHANGED = "TV-ens sertifikat er endret siden paringen. Det kan bety at noen utgir seg for TV-en. Par på nytt bare hvis TV-en er tilbakestilt eller oppdatert."
         const val NO_WAKE = "Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på via Wi‑Fi» er aktivert i TV-ens innstillinger."
 
-        private val PERMISSIONS = listOf(
-            "CONTROL_AUDIO", "CONTROL_DISPLAY", "CONTROL_INPUT_JOYSTICK", "CONTROL_INPUT_MEDIA_PLAYBACK",
-            "CONTROL_INPUT_TV", "CONTROL_POWER", "READ_APP_STATUS", "READ_CURRENT_CHANNEL",
-            "READ_INPUT_DEVICE_LIST", "WRITE_NOTIFICATION_TOAST", "CONTROL_INPUT_TEXT",
-            "READ_INSTALLED_APPS", "LAUNCH", "READ_NETWORK_STATE",
+        // Samme tillatelser som LG-biblioteket i Home Assistant (aiowebostv). CONTROL_MOUSE_AND_KEYBOARD
+        // er påkrevd for pekersocketen (navigasjon); uten den svarer TV-en «401 insufficient permissions».
+        val PERMISSIONS = listOf(
+            "APP_TO_APP", "CLOSE", "CONTROL_AUDIO", "CONTROL_DISPLAY", "CONTROL_INPUT_JOYSTICK",
+            "CONTROL_INPUT_MEDIA_PLAYBACK", "CONTROL_INPUT_MEDIA_RECORDING", "CONTROL_INPUT_TEXT", "CONTROL_INPUT_TV",
+            "CONTROL_MOUSE_AND_KEYBOARD", "CONTROL_POWER", "CONTROL_TV_SCREEN", "LAUNCH", "LAUNCH_WEBAPP",
+            "READ_APP_STATUS", "READ_COUNTRY_INFO", "READ_CURRENT_CHANNEL", "READ_INPUT_DEVICE_LIST",
+            "READ_INSTALLED_APPS", "READ_LGE_SDX", "READ_LGE_TV_INPUT_EVENTS", "READ_NETWORK_STATE",
+            "READ_NOTIFICATIONS", "READ_POWER_STATE", "READ_RUNNING_APPS", "READ_SETTINGS", "READ_TV_CHANNEL_LIST",
+            "READ_TV_CURRENT_TIME", "READ_UPDATE_INFO", "SEARCH", "TEST_OPEN", "TEST_PROTECTED", "TEST_SECURE",
+            "UPDATE_FROM_REMOTE_APP", "WRITE_NOTIFICATION_ALERT", "WRITE_NOTIFICATION_TOAST", "WRITE_SETTINGS",
         )
-        val BUTTONS = mapOf("Up" to "UP", "Down" to "DOWN", "Left" to "LEFT", "Right" to "RIGHT", "Select" to "ENTER", "Back" to "BACK", "Home" to "HOME")
+
+        /** Økes når tillatelsene endres; eldre nøkler gir ikke de nye tillatelsene, så da parer vi på nytt. */
+        const val MANIFEST_REVISION = 2
+
+        fun registrationPayload(stored: KeyStore.Entry?): JSONObject {
+            val manifest = JSONObject()
+                .put("manifestVersion", 1)
+                .put("appVersion", "1.1")
+                .put("permissions", JSONArray(PERMISSIONS))
+            val payload = JSONObject().put("forcePairing", false).put("pairingType", "PROMPT").put("manifest", manifest)
+            if (stored?.key != null && stored.rev == MANIFEST_REVISION) payload.put("client-key", stored.key)
+            return payload
+        }
+        // Knappenavn for pekersocketen (samme liste som LG-fjernkontrollen; se homebridge-webos-tv).
+        val BUTTONS = mapOf(
+            "Up" to "UP", "Down" to "DOWN", "Left" to "LEFT", "Right" to "RIGHT", "Select" to "ENTER", "Back" to "BACK", "Home" to "HOME",
+            "Red" to "RED", "Green" to "GREEN", "Yellow" to "YELLOW", "Blue" to "BLUE",
+            "Info" to "INFO", "Guide" to "PROGRAM", "List" to "LIST", "Dash" to "DASH", "Exit" to "EXIT", "Settings" to "MENU",
+            "Subtitles" to "CC", "Teletext" to "TELETEXT", "Aspect" to "ASPECT_RATIO", "Recent" to "RECENT",
+        ) + (0..9).associate { "Num$it" to "$it" }
+        val EXTRA_KEYS = (0..9).map { "Num$it" } + listOf(
+            "Red", "Green", "Yellow", "Blue", "Info", "Guide", "List", "Dash", "Exit", "Settings",
+            "Subtitles", "Teletext", "Aspect", "Recent", "Enter",
+        )
+        const val YOUTUBE_APP_ID = "youtube.leanback.v4"
         val REQUESTS: Map<String, Pair<String, JSONObject?>> = mapOf(
             "VolumeUp" to ("ssap://audio/volumeUp" to null),
             "VolumeDown" to ("ssap://audio/volumeDown" to null),
@@ -79,6 +110,7 @@ class LgSession(
             "ChannelUp" to ("ssap://tv/channelUp" to null),
             "ChannelDown" to ("ssap://tv/channelDown" to null),
             "Backspace" to ("ssap://com.webos.service.ime/deleteCharacters" to JSONObject().put("count", 1)),
+            "Enter" to ("ssap://com.webos.service.ime/sendEnterKey" to null),
         )
 
         fun fingerprint(cert: X509Certificate): String =
@@ -103,6 +135,8 @@ class LgSession(
     @Volatile var status: String = IDLE; private set
     @Volatile var code: String? = null; private set
     @Volatile var canWake = false; private set
+    @Volatile var model: String? = null; private set
+    private var lastPlay = false
 
     private var generation = 0
     private var control: Socket? = null
@@ -193,7 +227,7 @@ class LgSession(
         rejectPending(LOST)
         closeSocket(pointer)
         closeSocket(control)
-        host = null; control = null; pointer = null; ready = false; status = IDLE; code = null; canWake = false; apps = emptyList()
+        host = null; control = null; pointer = null; ready = false; status = IDLE; code = null; canWake = false; apps = emptyList(); model = null
     }
 
     suspend fun disconnect() = withContext(state) { resetLocked() }
@@ -214,7 +248,7 @@ class LgSession(
 
     private data class Auto(val attempt: Int, val delays: List<Long>, val message: String)
 
-    private suspend fun request(uri: String, payload: JSONObject? = null): JSONObject? {
+    private suspend fun request(uri: String, payload: JSONObject? = null, timeoutMs: Long = requestTimeoutMs): JSONObject? {
         val socket = control
         if (socket == null || !socket.open) throw UserError(status, 409)
         val id = "req_${sequence.incrementAndGet()}"
@@ -224,7 +258,7 @@ class LgSession(
         if (payload != null) message.put("payload", payload)
         socket.ws.send(message.toString())
         return try {
-            withTimeout(requestTimeoutMs) { deferred.await() }
+            withTimeout(timeoutMs) { deferred.await() }
         } catch (e: TimeoutCancellationException) {
             pending.remove(id)
             throw UserError("LG TV svarte ikke på kommandoen.", 504)
@@ -240,10 +274,13 @@ class LgSession(
         var last: Throwable? = null
         for (url in attempts) {
             try {
-                return openSocket(url, if (url.startsWith("wss:")) pinned else null, onMessage, onClose) to url.startsWith("wss:")
+                val socket = openSocket(url, if (url.startsWith("wss:")) pinned else null, onMessage, onClose)
+                log("LG: tilkoblet $url")
+                return socket to url.startsWith("wss:")
             } catch (e: CertificateMismatch) {
                 throw e
             } catch (e: Throwable) {
+                e.rethrowCancellation()
                 last = e
                 log("LG: $url feilet (${e.message})")
             }
@@ -261,6 +298,7 @@ class LgSession(
                 keyStore.update(target, mac = mac)
             }
         } catch (e: Exception) {
+            e.rethrowCancellation()
             log("LG: fant ikke MAC-adresse (${e.message})")
         }
     }
@@ -268,12 +306,15 @@ class LgSession(
     private suspend fun openPointer(gen: Int, retry: Boolean = true) {
         val path = try {
             request("ssap://com.webos.service.networkinput/getPointerInputSocket")?.optString("socketPath")
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            e.rethrowCancellation()
+            log("LG: pekersocket avvist (${e.message})")
             null
         }
         if (!current(gen)) return
         if (path == null || !Regex("^wss?://").containsMatchIn(path)) {
             status = NO_POINTER
+            code = "needs-repair"
             return
         }
         try {
@@ -292,8 +333,13 @@ class LgSession(
             pointer = socket
             ready = true
             status = READY
-            if (retry) host?.let { rememberMac(it) }
+            log("LG: klar (navigasjon tilkoblet)")
+            if (retry) host?.let {
+                rememberMac(it)
+                rememberModel()
+            }
         } catch (e: Exception) {
+            e.rethrowCancellation()
             log("LG: pekersocket feilet (${e.message})")
             if (current(gen)) status = POINTER_LOST
         }
@@ -307,6 +353,7 @@ class LgSession(
         if (waiting != null) {
             val payload = message.optJSONObject("payload")
             if (message.optString("type") == "error" || payload?.optBoolean("returnValue", true) == false) {
+                log("LG: $id avvist (${message.optString("error").ifEmpty { payload?.optString("errorText") ?: "ukjent" }})")
                 waiting.completeExceptionally(UserError("TV-en avviste kommandoen.", 502))
             } else {
                 waiting.complete(payload)
@@ -320,14 +367,16 @@ class LgSession(
                 val key = message.optJSONObject("payload")?.optString("client-key")?.ifEmpty { null }
                 val fp = socket.fingerprint
                 host?.let { target ->
-                    runCatching { keyStore.update(target, key = key, fingerprint = fp) }
+                    runCatching { keyStore.update(target, key = key, fingerprint = fp, rev = if (key != null) MANIFEST_REVISION else null) }
                         .onFailure { log("LG: kunne ikke lagre nøkkel (${it.message})") }
                 }
                 status = PREPARING
+                log("LG: paring godkjent")
                 scope.launch(state) { openPointer(gen) }
             }
             "error" -> {
                 pairingJob?.cancel()
+                log("LG: registrering avvist (${message.optString("error")})")
                 status = REJECTED
             }
         }
@@ -361,12 +410,14 @@ class LgSession(
                 },
             )
         } catch (e: CertificateMismatch) {
+            log("LG: sertifikatet stemmer ikke med det som ble låst ved paring")
             if (current(gen)) {
                 status = CERT_CHANGED
                 code = "cert-changed"
             }
             return
         } catch (e: Throwable) {
+            e.rethrowCancellation()
             if (!current(gen)) return
             if (auto != null) scheduleReconnect(target, auto.attempt + 1, auto.delays, auto.message) else status = UNREACHABLE
             return
@@ -374,13 +425,7 @@ class LgSession(
         if (!current(gen)) return closeSocket(socket)
         control = socket
 
-        val manifest = JSONObject()
-            .put("manifestVersion", 1)
-            .put("appVersion", "1.0")
-            .put("permissions", JSONArray(PERMISSIONS))
-            .put("signatures", JSONArray().put(JSONObject().put("signatureVersion", 1).put("signature", "dummy_signature")))
-        val payload = JSONObject().put("forcePairing", false).put("pairingType", "PROMPT").put("manifest", manifest)
-        stored?.key?.let { payload.put("client-key", it) }
+        val payload = registrationPayload(stored)
         status = PAIRING
         socket.ws.send(JSONObject().put("type", "register").put("id", "register_0").put("payload", payload).toString())
         pairingJob = scope.launch(state) {
@@ -394,6 +439,36 @@ class LgSession(
 
     suspend fun connect(target: String) = withContext(state) { connectLocked(target) }
 
+    /**
+     * Kalles når appen kommer i forgrunnen eller nettverket kommer tilbake. Android fryser appen i
+     * bakgrunnen, og TV-en lukker da forbindelsen uten at vi merker det. Sjekk at den lever, og koble
+     * til på nytt med lagret nøkkel hvis ikke (ingen ny godkjenning på TV-en).
+     */
+    suspend fun ensureConnected(target: String) = withContext(state) {
+        if (host == target && status in setOf(CONNECTING, PAIRING, PREPARING, WAKING)) return@withContext
+        // Tilstander som krever at brukeren gjør noe, skal ikke gi nye forespørsler på TV-en av seg selv.
+        if (host == target && status in setOf(CERT_CHANGED, REJECTED, PAIRING_TIMEOUT, NO_POINTER)) return@withContext
+        if (ready && host == target) {
+            val alive = try {
+                request("ssap://audio/getStatus", timeoutMs = 1500)
+                pointer?.open == true
+            } catch (_: Exception) {
+                false
+            }
+            if (alive) return@withContext
+            log("LG: forbindelsen svarte ikke etter pause, kobler til igjen")
+        } else {
+            log("LG: kobler til igjen etter pause")
+        }
+        connectLocked(target, Auto(0, reconnectDelays, RECONNECTING))
+    }
+
+    /** I bakgrunnen: ikke bruk batteri på gjenoppkoblingsforsøk som Android uansett blokkerer. */
+    suspend fun pauseReconnect() = withContext(state) {
+        reconnectJob?.cancel()
+        Unit
+    }
+
     private fun pressButton(name: String) {
         val socket = pointer
         if (!ready || socket == null || !socket.open) throw UserError(status, 409)
@@ -403,12 +478,30 @@ class LgSession(
     suspend fun command(key: String) = withContext(state) {
         if (!ready) throw UserError(status, 409)
         BUTTONS[key]?.let { return@withContext pressButton(it) }
+        if (key == "PlayPause") {
+            // Én knapp: spør TV-en om noe spilles av, og send pause eller play etter det.
+            var playing = lastPlay
+            try {
+                val state = request("ssap://com.webos.media/getForegroundAppInfo")
+                    ?.optJSONArray("foregroundAppInfo")?.optJSONObject(0)?.optString("playState")
+                if (!state.isNullOrEmpty()) playing = state == "playing"
+            } catch (e: Exception) {
+                e.rethrowCancellation()
+                log("LG: fant ikke avspillingsstatus (${e.message}), veksler lokalt")
+            }
+            val next = if (playing) "Pause" else "Play"
+            val (uri, payload) = REQUESTS.getValue(next)
+            request(uri, payload)
+            lastPlay = next == "Play"
+            return@withContext
+        }
         if (key == "Mute") {
             // Les faktisk lydstatus, slik at appen ikke kommer i utakt med den vanlige fjernkontrollen.
             try {
                 val muted = request("ssap://audio/getStatus")?.optBoolean("mute") ?: false
                 request("ssap://audio/setMute", JSONObject().put("mute", !muted))
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                e.rethrowCancellation()
                 pressButton("MUTE")
             }
             return@withContext
@@ -441,7 +534,15 @@ class LgSession(
             val point = points.optJSONObject(i) ?: continue
             try {
                 val id = Validate.appId(point.optString("id"))
-                list += App(id, point.optString("title").ifEmpty { id }.take(80))
+                val color = point.optString("bgColor").takeIf { Regex("^#[0-9a-fA-F]{6}$").matches(it) }
+                list += App(
+                    id,
+                    point.optString("title").ifEmpty { id }.take(80),
+                    system = point.optBoolean("systemApp", false),
+                    color = color,
+                    // largeIcon er skarpere på telefoner med høy oppløsning.
+                    icon = point.optString("largeIcon").ifEmpty { point.optString("icon") }.ifEmpty { null },
+                )
             } catch (_: UserError) {
                 // hopp over ugyldige id-er
             }
@@ -451,10 +552,80 @@ class LgSession(
         list
     }
 
+    /** Modellnavnet brukes som TV-navn når brukeren ikke har valgt et eget. */
+    private suspend fun rememberModel() {
+        try {
+            val name = request("ssap://system/getSystemInfo")?.optString("modelName")?.trim()?.take(40)
+            if (!name.isNullOrEmpty()) model = "LG $name"
+        } catch (e: Exception) {
+            e.rethrowCancellation()
+            log("LG: fant ikke modellnavn (${e.message})")
+        }
+    }
+
+    /** Henter et appikon, men bare fra TV-en selv (http eller https med TV-ens egne sertifikat). */
+    suspend fun icon(id: String): ByteArray = withContext(state) {
+        val url = apps.firstOrNull { it.id == id }?.icon ?: throw UserError("Fant ikke ikonet.", 404)
+        val parsed = url.toHttpUrlOrNull() ?: throw UserError("Fant ikke ikonet.", 404)
+        if (parsed.host != host) throw UserError("Fant ikke ikonet.", 404)
+        withContext(Dispatchers.IO) {
+            try {
+                fetchIcon(parsed)
+            } catch (e: Exception) {
+                e.rethrowCancellation()
+                // TV-er som bare har kryptert port, serverer de samme ressursene på https://…:3001.
+                if (parsed.isHttps) throw e
+                fetchIcon(parsed.newBuilder().scheme("https").port(3001).build())
+            }
+        }
+    }
+
+    private fun fetchIcon(url: okhttp3.HttpUrl): ByteArray {
+        val client = if (url.isHttps) clientFor(null, AtomicReference(null)) else baseClient
+        return client.newBuilder().callTimeout(3, TimeUnit.SECONDS).build()
+            .newCall(Request.Builder().url(url).build()).execute().use { response ->
+                if (!response.isSuccessful) throw UserError("TV-en ga ikke ut ikonet.", 502)
+                val body = response.body ?: throw UserError("TV-en ga ikke ut ikonet.", 502)
+                Icons.readLimited(body.byteStream())
+            }
+    }
+
     suspend fun launch(id: String) = withContext(state) {
         if (!ready) throw UserError(status, 409)
         if (apps.none { it.id == id }) throw UserError("Ukjent app.", 404)
         request("ssap://system.launcher/launch", JSONObject().put("id", id))
+        Unit
+    }
+
+    private var inputList: List<Input> = emptyList()
+
+    suspend fun inputs(): List<Input> = withContext(state) {
+        if (!ready) throw UserError(status, 409)
+        val devices = request("ssap://tv/getExternalInputList")?.optJSONArray("devices") ?: JSONArray()
+        val list = mutableListOf<Input>()
+        for (i in 0 until devices.length()) {
+            val device = devices.optJSONObject(i) ?: continue
+            val id = runCatching { Validate.inputId(device.optString("id")) }.getOrNull() ?: continue
+            list += Input(id, device.optString("label").ifEmpty { id }.take(60), device.optBoolean("connected", true))
+            if (list.size >= 24) break
+        }
+        inputList = list
+        list
+    }
+
+    suspend fun switchInput(id: String) = withContext(state) {
+        if (!ready) throw UserError(status, 409)
+        if (inputList.none { it.id == id }) throw UserError("Ukjent inngang.", 404)
+        request("ssap://tv/switchInput", JSONObject().put("inputId", id))
+        Unit
+    }
+
+    /** Spiller en YouTube-video på TV-en, som casting (contentTarget, som i homebridge-webos-tv). */
+    suspend fun playYoutube(videoId: String) = withContext(state) {
+        if (!ready) throw UserError(status, 409)
+        val id = apps.firstOrNull { it.id.contains("youtube", ignoreCase = true) }?.id ?: YOUTUBE_APP_ID
+        log("LG: spiller YouTube-video $videoId")
+        request("ssap://system.launcher/launch", JSONObject().put("id", id).put("params", JSONObject().put("contentTarget", YouTube.tvVideoTarget(videoId))))
         Unit
     }
 
