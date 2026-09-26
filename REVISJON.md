@@ -4,6 +4,8 @@
 **Omfang:** Hele repoet: `server.mjs`, `app.js`, `sw.js`, `index.html`, `style.css`, `manifest.webmanifest`, `README.md`, `icons/`
 **Mål:** Gjøre design, brukeropplevelse og teknikk optimalt, og **fjerne det generiske «AI-laget»-uttrykket**.
 
+> **Status:** Alle forslag er gjennomført i versjon 2.0.0. Del A–D beskriver tilstanden **før** utbedring (filreferanser gjelder den gamle koden). **[Del E](#del-e--etter-utbedring-v200)** viser resultatet og ny skår: **47 → 83 / 100**.
+
 ## Metode
 
 Gjennomgangen følger sjekklistene i pluginen [everything-claude-code](https://github.com/affaan-m/everything-claude-code) (ECC v2.2.2, installert med prosjektomfang i `.claude/settings.json`):
@@ -84,7 +86,7 @@ Gjennomgangen følger sjekklistene i pluginen [everything-claude-code](https://g
 
 | Kontroll, uten bro | Kontroll, tilkoblet | TV-er | Hjelp | Dialog |
 | --- | --- | --- | --- | --- |
-| ![](docs/revisjon/01-kontroll-uten-bro.png) | ![](docs/revisjon/02-kontroll-tilkoblet.png) | ![](docs/revisjon/03-tv-er.png) | ![](docs/revisjon/04-hjelp.png) | ![](docs/revisjon/05-dialog-ip.png) |
+| ![](docs/revisjon/for/01-kontroll-uten-bro.png) | ![](docs/revisjon/for/02-kontroll-tilkoblet.png) | ![](docs/revisjon/for/03-tv-er.png) | ![](docs/revisjon/for/04-hjelp.png) | ![](docs/revisjon/for/05-dialog-ip.png) |
 
 Legg merke til skjermbilde 02: selve fjernkontrollen begynner halvveis ned, og volumknappene er skjult bak bunnmenyen.
 
@@ -240,3 +242,91 @@ $ curl -H "Host: localhost:8799" http://127.0.0.1:8799/   →  404
 | **5. Kvalitet** | Lesbar kode, `package.json`, `node:test`, GitHub Actions, polling-pause, manifest | M4, M6, lav nr. 1–7, 9 | 85–90 |
 
 Fase 3 er den som flytter inntrykket fra «AI-laget» til «bevisst designet». Anbefalingen er å gjøre fase 1–2 først (små og trygge), og så redesignet som én samlet endring med før/etter-skjermbilder.
+
+---
+
+## Del E – Etter utbedring (v2.0.0)
+
+### Ny totalskår: **83 / 100** (før: 47)
+
+| # | Område | Før | Etter | Hva ble gjort |
+| --- | --- | --- | --- | --- |
+| 1 | Funksjon og korrekthet | 4 | 8 | Filene ligger i `public/`. Riktige Roku ECP-taster (`Rev`, `Fwd`, `Play`). LG prøver `wss://:3001` og faller tilbake til `ws://:3000`. |
+| 2 | Sikkerhet | 7,5 | 9 | Streng CSP og sikkerhetshoder på alle svar, `.gitignore` for `data/`, nøkkelfil med 0600 og atomisk skriving. |
+| 3 | Robusthet og feilhåndtering | 4,5 | 8,5 | UDP-feil krasjer ikke lenger broen. Alle feil oversettes til norsk, interne detaljer logges bare i Termux. LG har tidsavbrudd på tilkobling, paring og kommandoer. Ett TV-søk om gangen. |
+| 4 | Visuell kvalitet og konsistens | 5 | 8,5 | 12 farge-tokens (før 62 rå farger), 3 radier (før 9), 5 skriftstørrelser (før 17), 0 gradienter (før 7). |
+| 5 | Egenart (fravær av AI-preg) | 3 | 8 | Alle ti AI-mønstre i del A2 er fjernet. |
+| 6 | UX og informasjonsarkitektur | 5 | 8,5 | Hele fjernkontrollen passer på én skjerm fra 360×640. Hold-for-å-gjenta, tilbakemelding per knapp, én samlet TV-liste med hjelp. |
+| 7 | Tilgjengelighet | 6 | 8 | Alle knapper har navn (verifisert: 0 uten), ikoner er `aria-hidden`, minst 48 px trykkflate og 12 px tekst, Enter på fokusert knapp trykker knappen. |
+| 8 | PWA og ytelse | 6,5 | 8,5 | SVG-ikon, maskerbare ikoner, skjermbilder i manifestet, `lang: nb`. Pauser statussjekk når appen er skjult. Service worker v2 med reserve ved frakobling. |
+| 9 | Kodekvalitet og vedlikehold | 4 | 8 | Lesbar kode i moduler (`lib/`), avhengighetsinjeksjon for testing, egen WebSocket-klient uten npm. |
+| 10 | Test, CI og dokumentasjon | 2,5 | 8 | 34 tester (`node:test`), GitHub Actions på Node 20 og 22, ny README. |
+
+**Production audit (ECC): 80/100, «launchable with caveats»** (før: 40, blokkert). Taket er 84 inntil CI er grønn på `main` og appen er testet ende til ende mot ekte TV-er.
+
+### Design etter (ECC `design-system`)
+
+| Dimensjon | Før | Etter |
+| --- | --- | --- |
+| Fargekonsistens | 3 | 9 |
+| Typografisk hierarki | 5 | 8 |
+| Avstandsrytme | 4 | 9 |
+| Komponentkonsistens | 5 | 9 |
+| Responsivitet | 6 | 8 |
+| Mørk modus | 7 | 8 |
+| Animasjon | 6 | 8 |
+| Tilgjengelighet | 6 | 8 |
+| Informasjonstetthet | 4 | 8 |
+| Polish | 6 | 8 |
+| **Snitt** | **5,2** | **8,3** |
+
+### AI-mønstrene (del A2): status
+
+| # | Mønster | Status |
+| --- | --- | --- |
+| 1 | Todelt heltoverskrift | Fjernet. Første skjerm er fjernkontrollen. |
+| 2 | Eyebrows med sperret tekst | Fjernet. |
+| 3 | Markedsføringstekst i verktøyet | Fjernet. Bare konkrete verb og korte hjelpetekster. |
+| 4 | Navy + gull med gradienter og glød | Byttet til grafitt med én funksjonell aksent (oransje), ingen gradienter. |
+| 5 | Kort i kort | Fjernet. Knappegrupper står direkte på bakgrunnen. |
+| 6 | `↗` på alle knapper | Fjernet. |
+| 7 | Nummererte trinnkort | Erstattet av en kort nummerert liste i en sammenleggbar «Slik kobler du til». |
+| 8 | 3D-rendret app-ikon | Erstattet av et flatt SVG-ikon (d-pad-ring med oransje OK) som er skarpt ned til 32 px. |
+| 9 | Unicode-symboler som ikoner | Erstattet av ett inline SVG-sett (1,75 px strek, 24 px rutenett). |
+| 10 | Fontstabel med Inter som aldri lastes | Ærlig systemfont (Roboto på Android), monospace med tabulære tall for IP-adresser. |
+
+### Skjermbilder etter (390×844 og 360×640)
+
+| Kontroll | Ingen TV | TV-er | Paring | 360×640 |
+| --- | --- | --- | --- | --- |
+| ![](docs/revisjon/etter/01-kontroll.png) | ![](docs/revisjon/etter/02-ingen-tv.png) | ![](docs/revisjon/etter/03-tv-er.png) | ![](docs/revisjon/etter/07-paring.png) | ![](docs/revisjon/etter/08-liten-skjerm-360x640.png) |
+
+Flere i [`docs/revisjon/etter/`](docs/revisjon/etter/): hjelp, IP-dialog og tilstand uten bro.
+
+### Teknisk status
+
+| Funn | Status |
+| --- | --- |
+| K1 `public/` mangler | ✅ Filene er flyttet. Test: `serverer appen fra public/`. |
+| K2 UDP-krasj | ✅ `lib/ssdp.mjs` har feillytter hele levetiden og lukker i `finally`. |
+| H1 Roku-taster | ✅ `ROKU_KEYS` med test for alle kommandoer. |
+| H2 LG `wss://:3001` | ✅ Egen WebSocket-klient (`lib/ws-client.mjs`). Verifisert mot TLS-server med selvsignert sertifikat. **Ikke testet mot ekte LG-TV.** |
+| H3 Nøkler i git | ✅ `.gitignore` og filmodus 0600. |
+| M1 Engelske feil | ✅ `lib/errors.mjs`. |
+| M2 Mute i utakt | ✅ Leser `ssap://audio/getStatus` før `setMute`, med MUTE-knapp som reserve. |
+| M3 LG uten tidsavbrudd | ✅ Tilkobling 5 s, paring 30 s, kommandoer 4 s. |
+| M4 Polling i bakgrunnen | ✅ Pauser på `visibilitychange`. |
+| M5 Treg Roku-tekst | ✅ 1,2 s per tegn, stopper ved første feil. |
+| M6 Andre apper på telefonen | ⚠️ Akseptert risiko, dokumentert i README. En token kan ikke skilles fra en annen lokal app uten innlogging. |
+| M7 `localStorage` | ✅ Pakket i try/catch. |
+| M8 Sikkerhetshoder | ✅ CSP, `nosniff`, `no-referrer`, COOP og Permissions-Policy. |
+| M9 Parallelle søk | ✅ Delt `Promise`. |
+| Lav 1–9 | ✅ Node ≥ 20, manifest, meta, SW-versjon, tastatur, race ved oppstart, lesbar kode, tilgjengelighet og tester/CI. |
+
+### Gjenstår før 85+
+
+1. **Test på ekte TV-er:** Roku (tastene, tekst) og LG (paring via `wss://:3001`, pekersocket, mute). Dette kan ikke gjøres fra skyen.
+2. **Grønn CI på `main`** etter sammenslåing.
+3. **Skjermlesertest med TalkBack** på Android.
+4. Valgfritt: nettleserbasert E2E-test (Playwright) i CI. Den ble kjørt lokalt under arbeidet, men ikke lagt inn, for å holde prosjektet uten npm-avhengigheter.
+
