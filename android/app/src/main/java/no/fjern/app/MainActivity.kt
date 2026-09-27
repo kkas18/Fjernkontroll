@@ -16,6 +16,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.View
 import android.widget.FrameLayout
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.activity.ComponentActivity
@@ -70,6 +71,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val HOST = "appassets.androidplatform.net"
         private const val START = "https://$HOST/index.html"
+        private const val MIN_TEXT_ZOOM = 85
+        private const val MAX_TEXT_ZOOM = 115
 
         // Samme sikkerhetshoder som Node-broen setter.
         private val SECURITY_HEADERS = mapOf(
@@ -99,6 +102,10 @@ class MainActivity : ComponentActivity() {
 
         webView = WebView(this)
         webView.setBackgroundColor(getColor(R.color.bg))
+        // Fjernkontrollen står fast: ingen strekk-/glødeeffekt når man drar mot kanten, og ingen rullefelt.
+        webView.overScrollMode = View.OVER_SCROLL_NEVER
+        webView.isVerticalScrollBarEnabled = false
+        webView.isHorizontalScrollBarEnabled = false
         // WebView-innhold ignorerer polstring, så den ligger i en ramme som får polstringen i stedet.
         val root = FrameLayout(this).apply {
             setBackgroundColor(getColor(R.color.bg))
@@ -128,6 +135,8 @@ class MainActivity : ComponentActivity() {
             setGeolocationEnabled(false)
             mediaPlaybackRequiresUserGesture = true
             setSupportMultipleWindows(false)
+            // Følger systemets skriftstørrelse, men med tak, så en stor systemskrift ikke sprenger oppsettet.
+            textZoom = (resources.configuration.fontScale * 100).toInt().coerceIn(MIN_TEXT_ZOOM, MAX_TEXT_ZOOM)
         }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {

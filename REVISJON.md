@@ -235,3 +235,37 @@ Knapper TV-en ikke har, skjules automatisk ut fra `capabilities.keys`, som broen
 | Mer | TV-er | 320×568 |
 | --- | --- | --- |
 | ![](docs/revisjon/runde8/06-mer.png) | ![](docs/revisjon/runde8/07-tv-er.png) | ![](docs/revisjon/runde8/08-etter-320.png) |
+
+---
+
+## Runde 9 (v2.8.1): Fast fjernkontroll uten rulling
+
+**Brukerens tilbakemelding:** Appen virker veldig bra, men forsiden kan rulles opp/ned og sidelengs. Den skal stå fast og være kompakt.
+
+**Årsaker:**
+1. Siden hadde bare en minimumshøyde, ikke en fast høyde. Når Android-appen forstørrer teksten etter systemets skriftstørrelse, blir innholdet høyere enn skjermen, og da kan siden rulles.
+2. «Siste søk» var en rad som skulle rulles sidelengs.
+3. WebView-en viste Androids strekkeffekt når man dro mot kanten.
+
+**Utbedring:**
+- `html`, `body` og `.app` er låst til skjermhøyden (`100dvh`, `overflow: hidden`). Bare ark og YouTube-visningen ruller innvendig.
+- **Styrekorset tar plassen som er igjen.** Klyngen måler sin egen størrelse med container-enheter (`cqh`/`cqw`), og styrekors og ruller skaleres mellom omtrent 140 og 320 px. Alt får plass på alle skjermer, uten rulling.
+- «Siste søk» er én fast rad. Knapper som ikke får plass, skjules i stedet for å rulle sidelengs.
+- Android:
+  - `overScrollMode = OVER_SCROLL_NEVER` og ingen rullefelt.
+  - Tekstzoom følger systemets skriftstørrelse, men med tak på 85–115 %.
+
+### Verifisering
+- `npm run verify`: **80/80**.
+- Chromium på 320×568, 360×640, 360×740, 390×844, 412×780, 412×915 og 430×932, hver med normal og 115 % tekst:
+  - `scrollY`/`scrollX` er 0 etter forsøk på å rulle med hjul
+  - dokumentet er ikke høyere enn skjermen
+  - nedre kant står alltid 16 px fra bunnen
+  - styrekorset er rundt
+  - «Siste søk» kan ikke rulles
+- Ark og YouTube-resultater ruller fortsatt innvendig. Alle arksjekkene fra runde 8 består.
+- Ikke verifisert: på fysisk telefon.
+
+| 390×844 | 360×640 med 115 % tekst |
+| --- | --- |
+| ![](docs/revisjon/runde9/01-fast-390.png) | ![](docs/revisjon/runde9/02-fast-360-tekst115.png) |
