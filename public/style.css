@@ -1,4 +1,4 @@
-/* Fjern – et nøkternt, taktilt verktøy. Alle farger, radier og avstander kommer fra tokens under. */
+/* Fjern – kompakt og rolig, inspirert av Samsung One UI. Alle farger, radier og avstander kommer fra tokens under. */
 @font-face {
   font-family: "Manrope";
   src: url("/fonts/manrope-latin-wght.woff2") format("woff2");
@@ -10,20 +10,21 @@
 :root {
   color-scheme: dark;
 
-  --bg: #0f1012;
-  --surface: #17181b;
-  --raised: #212226;
-  --raised-hi: #2b2c31;
+  --bg: #0b0c0f;
+  --surface: #15161b;
+  --raised: #1f2027;
+  --raised-hi: #2a2c34;
   /* --line er bare for inndatafelt (WCAG 1.4.11 krever 3:1). Alle andre flater bruker --edge. */
   --line: #606166;
   --edge: rgb(255 255 255 / 0.07);
   --hairline: rgb(255 255 255 / 0.06);
-  --text: #ececed;
-  --muted: #a1a2a8;
+  --text: #f1f2f4;
+  --muted: #9b9da6;
   --focus: #f4f4f5;
-  /* Aksenten er forbeholdt OK og primærhandlinger. */
-  --accent: #ff6b2c;
-  --on-accent: #1c0b02;
+  /* Aksenten er forbeholdt OK og primærhandlinger. Hvit tekst på aksenten: 4,7:1. */
+  --accent: #3f73f0;
+  --accent-soft: rgb(63 115 240 / 0.16);
+  --on-accent: #ffffff;
   --ok: #3ecf8e;
   --ok-tint: rgb(62 207 142 / 0.2);
   --warn: #f5b041;
@@ -38,6 +39,8 @@
 
   --r-s: 8px;
   --r-m: 14px;
+  --r-l: 20px;
+  --r-xl: 28px;
   --r-full: 999px;
 
   --s-1: 4px;
@@ -102,7 +105,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 }
 
 /* Topplinje */
-.bar { display: flex; align-items: center; gap: var(--s-2); min-height: 56px; }
+.bar { display: flex; align-items: center; gap: var(--s-2); min-height: 52px; }
 .device {
   flex: 1;
   min-width: 0;
@@ -116,7 +119,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   text-align: left;
 }
 .device-text { min-width: 0; display: flex; flex-direction: column; }
-.device-name { font-size: 19px; font-weight: 750; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-name { font-size: 18px; font-weight: 750; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .device-meta { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
 .led { width: 10px; height: 10px; flex: none; border-radius: var(--r-full); background: var(--line); }
 .led[data-state="ok"] { background: var(--ok); }
@@ -140,7 +143,8 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .icon-button:active { transform: scale(0.94); background: var(--raised-hi); }
 .icon-button:disabled { opacity: 0.4; cursor: default; transform: none; }
 /* Strøm er den mest inngripende handlingen og skiller seg ut fra alt annet i toppen. */
-.icon-button.power { color: var(--err); background: var(--danger-soft); border-color: rgb(255 97 89 / 0.28); box-shadow: none; }
+.icon-button.power { width: 40px; height: 40px; color: var(--err); background: var(--danger-soft); border-color: transparent; box-shadow: none; }
+.icon-button.power .icon { width: 20px; height: 20px; }
 .icon-button.power:active { background: rgb(255 97 89 / 0.2); }
 
 /* Statuslinje: vises bare når noe krever oppmerksomhet */
@@ -160,19 +164,18 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .notice[data-tone="busy"] { border-left-color: var(--warn); }
 .notice[data-tone="err"] { border-left-color: var(--err); }
 
-/* Fjernkontrollen: skyves ned mot tommelen */
-/* Mellomrommene vokser med skjermhøyden, så høye telefoner ikke får et tomt felt midt på. */
-.remote { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-3), 2.2dvh, 22px); padding-top: var(--s-3); }
+/* Fjernkontrollen: alt samlet nederst mot tommelen. Rekkefølge: favoritter → kontrollkortet → snarveier. */
+.remote { flex: 0 1 auto; margin-top: auto; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: clamp(var(--s-2), 1.6dvh, var(--s-4)); padding-top: var(--s-2); }
 
-/* Favorittene står rett over kontrollene, så alt er samlet i én blokk ved tommelen. */
+/* Favoritter: én rad med fem ikoner */
 .apps { flex: 0 0 auto; display: flex; flex-direction: column; }
-.fav-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-3) var(--s-2); }
+.fav-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-2); }
 .fav {
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   padding: 0;
   border: 0;
   background: none;
@@ -180,7 +183,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   transition-duration: var(--press);
 }
 .fav:active { transform: scale(0.94); }
-.fav-label { max-width: 100%; font-size: var(--t-xs); font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-label { max-width: 100%; font-size: clamp(10px, 3vw, 11px); font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .app-icon {
   position: relative;
@@ -196,7 +199,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   letter-spacing: -0.03em;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 1px 2px rgb(0 0 0 / 0.4);
 }
-.app-icon.m { width: clamp(46px, 6.4dvh, 54px); height: clamp(46px, 6.4dvh, 54px); border-radius: 14px; font-size: 15px; }
+.app-icon.m { width: clamp(44px, 5.8dvh, 52px); height: clamp(44px, 5.8dvh, 52px); border-radius: 14px; font-size: 14px; }
 .app-icon.s { width: 40px; height: 40px; border-radius: 10px; font-size: var(--t-xs); }
 .app-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .app-icon.has-image { color: transparent; }
@@ -227,20 +230,124 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .app-star[aria-pressed="true"] { color: var(--star); }
 .app-star[aria-pressed="true"] use { fill: currentColor; }
 
-.segmented-bar button, .rocker button, .dir, .ok {
+.rocker button, .dir, .ok, .key, .transport button, .tool {
   transition-property: transform, background-color, box-shadow, color;
   transition-duration: var(--press);
   transition-timing-function: ease-out;
 }
 
-/* Hierarki, fra lettest til tyngst: verktøylinje (uten flate) → avspilling (rolig flate) →
-   meny (hevet) → styrekorset (hevet, størst, med aksent). */
+/* Kontrollkortet: én flate med styrekors, volum/kanal, menyknapper og avspilling (som en fysisk fjernkontroll). */
+.deck {
+  flex: 0 0 auto;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border-radius: var(--r-xl);
+  background: linear-gradient(180deg, #17181e, #121318);
+  border: 1px solid var(--edge);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
 
-/* Verktøylinje: Kilde, 123, Oppsett, Mer. Uten flate, så den ikke konkurrerer med kontrollene. */
-.toolbar { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s-1); padding: 0 var(--s-1); border-top: 1px solid var(--hairline); padding-top: var(--s-2); }
+/* Styrekorset bruker hele bredden i kortet, men krymper på lave skjermer så alt får plass uten rulling.
+   Kortet følger innholdet, så det blir ikke tomrom i det. */
+.cluster {
+  --pad: clamp(140px, min(100cqw - 40px, 100dvh - 488px), 272px);
+  display: grid;
+  place-items: center;
+}
+
+/* Volum og kanal: vannrette vippeknapper (− VOL +, ▼ CH ▲) under styrekorset */
+.levels { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s-2); }
+.rocker {
+  height: 48px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  border-radius: var(--r-full);
+  background: var(--raised);
+  overflow: hidden;
+}
+.rocker button { border: 0; background: none; display: grid; place-items: center; min-width: 0; color: var(--text); }
+.rocker button .icon { width: 20px; height: 20px; }
+.rocker button:active { background: var(--raised-hi); }
+.rocker.is-unused { display: none; }
+.rocker-label { align-self: center; text-align: center; font-size: 11px; font-weight: 750; letter-spacing: 0.12em; color: var(--muted); }
+
+.dpad {
+  position: relative;
+  width: var(--pad);
+  height: var(--pad);
+  justify-self: center;
+  border-radius: var(--r-full);
+  background: radial-gradient(circle at 50% 40%, #262832, #1c1d24 70%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 6px 18px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+}
+/* Hver retning er en kakebit av platen (clip-path), så trykk og tilbakemelding følger den runde formen.
+   OK ligger over midten. */
+.dir { position: absolute; inset: 0; border: 0; background: none; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.dir:active { background: rgb(255 255 255 / 0.06); color: var(--text); }
+.dir:focus-visible { outline: none; background: var(--press-tint); }
+.dir .icon { width: 22px; height: 22px; stroke-width: 2; }
+.dir.up { clip-path: polygon(50% 50%, 0 0, 100% 0); align-items: flex-start; padding-top: 9%; }
+.dir.down { clip-path: polygon(50% 50%, 0 100%, 100% 100%); align-items: flex-end; padding-bottom: 9%; }
+.dir.left { clip-path: polygon(50% 50%, 0 0, 0 100%); justify-content: flex-start; padding-left: 9%; }
+.dir.right { clip-path: polygon(50% 50%, 100% 0, 100% 100%); justify-content: flex-end; padding-right: 9%; }
+.ok {
+  position: absolute;
+  z-index: 1;
+  inset: 31%;
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 0;
+  font-size: var(--t-m);
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 0 6px var(--accent-soft), 0 4px 12px rgb(0 0 0 / 0.45);
+}
+.ok:active { transform: scale(0.95); }
+
+/* Tilbake, Hjem, Lyd av: tre like knapper med ikon og tekst */
+.keyrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-2); }
+.key {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 var(--s-2);
+  border: 0;
+  border-radius: var(--r-l);
+  background: var(--raised);
+  font-size: 13px;
+  font-weight: 650;
+}
+.key .icon { width: 20px; height: 20px; }
+.key span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.key:active { transform: scale(0.97); background: var(--raised-hi); }
+/* Smale kort (f.eks. 320 px brede telefoner): bare ikon, teksten blir skjermlesernavn. */
+@container (max-width: 300px) {
+  .key { gap: 0; }
+  .key span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+
+/* Avspilling: lett rad, ⏯ i midten med aksentfarget flate */
+.transport { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s-2); }
+.transport button { height: 44px; display: grid; place-items: center; border: 0; border-radius: var(--r-full); background: none; color: var(--muted); }
+.transport button:active { background: var(--raised); color: var(--text); }
+.transport .primary-play { width: 72px; background: var(--accent-soft); color: #c9d7ff; }
+.transport .primary-play:active { background: rgb(63 115 240 / 0.28); }
+.transport .primary-play .icon { width: 24px; height: 24px; }
+
+/* Snarveier nederst (Kilde, 123, Oppsett, Mer), som navigasjonslinjen i One UI */
+.dock { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s-1); }
 .tool {
   min-width: 0;
-  min-height: var(--tap);
+  min-height: 52px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -251,126 +358,17 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   border-radius: var(--r-m);
   background: none;
   color: var(--text);
-  transition-property: transform, background-color;
-  transition-duration: var(--press);
 }
-.tool span { max-width: 100%; font-size: var(--t-xs); font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool span { max-width: 100%; font-size: 11px; font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool .icon { width: 20px; height: 20px; }
 .tool:active { transform: scale(0.96); background: var(--press-tint); }
-
-/* Sammenhengende knappegrupper, som på en fysisk fjernkontroll */
-.segmented-bar {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  border-radius: var(--r-m);
-  background: var(--raised);
-  border: 1px solid var(--edge);
-  box-shadow: var(--bevel);
-  overflow: hidden;
-}
-.segmented-bar button {
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 0;
-  border-left: 1px solid var(--hairline);
-  background: none;
-  font-size: var(--t-s);
-  font-weight: 600;
-  color: var(--muted);
-}
-.segmented-bar button:first-child { border-left: 0; }
-.segmented-bar button .icon { color: var(--text); }
-.segmented-bar button:active { background: var(--raised-hi); }
-/* Avspilling er sekundært: lavere og roligere */
-.segmented-bar.transport { background: var(--surface); border-color: transparent; box-shadow: none; }
-.segmented-bar.transport button { min-height: 48px; border-left-color: transparent; }
-.segmented-bar.transport button .icon { color: var(--muted); }
-.segmented-bar.transport button:active { background: var(--raised); }
-.segmented-bar.transport .primary-play .icon { width: 26px; height: 26px; }
-
-/* Styrekorset tar plassen som er igjen: det vokser på høye skjermer og krymper på lave,
-   så alt alltid får plass uten rulling (container-enheter måler klyngens egen størrelse). */
-.cluster {
-  flex: 1 1 0;
-  min-height: 140px;
-  container-type: size;
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) 56px;
-  align-items: center;
-  gap: var(--s-2);
-}
-.cluster > * { --pad: min(100cqh, calc(100cqw - 128px), 320px); }
-
-.rocker {
-  height: min(var(--pad), 280px);
-  display: grid;
-  grid-template-rows: 1fr auto 1fr;
-  border-radius: var(--r-full);
-  background: var(--raised);
-  border: 1px solid var(--edge);
-  box-shadow: var(--bevel);
-  overflow: hidden;
-}
-.rocker button { border: 0; background: none; display: grid; place-items: center; min-height: 0; }
-.rocker button:active { background: var(--raised-hi); }
-.rocker.is-unused { visibility: hidden; }
-.rocker-label { text-align: center; font-size: var(--t-xs); font-weight: 750; letter-spacing: 0.08em; color: var(--text); opacity: 0.8; padding: var(--s-1) 0; }
-
-.dpad {
-  position: relative;
-  width: var(--pad);
-  height: var(--pad);
-  justify-self: center;
-  border-radius: var(--r-full);
-  background: var(--raised);
-  border: 1px solid var(--edge);
-  box-shadow: var(--bevel);
-  overflow: hidden;
-}
-/* Hver retning er en kakebit av platen (clip-path), så trykk og tilbakemelding følger den runde formen.
-   Treffflaten klippes også, og OK ligger over midten. */
-.dpad::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(45deg, transparent calc(50% - 0.5px), var(--hairline) 50%, transparent calc(50% + 0.5px)),
-    linear-gradient(-45deg, transparent calc(50% - 0.5px), var(--hairline) 50%, transparent calc(50% + 0.5px));
-  pointer-events: none;
-}
-.dir { position: absolute; inset: 0; border: 0; background: none; display: flex; align-items: center; justify-content: center; }
-.dir:active { background: var(--raised-hi); }
-.dir:focus-visible { outline: none; background: var(--press-tint); }
-.dir .icon { width: 26px; height: 26px; }
-.dir.up { clip-path: polygon(50% 50%, 0 0, 100% 0); align-items: flex-start; padding-top: 10%; }
-.dir.down { clip-path: polygon(50% 50%, 0 100%, 100% 100%); align-items: flex-end; padding-bottom: 10%; }
-.dir.left { clip-path: polygon(50% 50%, 0 0, 0 100%); justify-content: flex-start; padding-left: 10%; }
-.dir.right { clip-path: polygon(50% 50%, 100% 0, 100% 100%); justify-content: flex-end; padding-right: 10%; }
-.ok {
-  position: absolute;
-  z-index: 1;
-  inset: 30%;
-  border-radius: var(--r-full);
-  background: var(--accent);
-  color: var(--on-accent);
-  border: 0;
-  font-size: var(--t-l);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 2px 6px rgb(0 0 0 / 0.5);
-}
-.ok:active { transform: scale(0.95); }
 
 /* Tilbakemelding per knapp: ring på frittstående knapper, farget flate inne i grupper
    (styrekors, ruller, knapperader), der en ring ville blitt klippet eller firkantet. */
 .is-sent { box-shadow: inset 0 0 0 2px var(--ok) !important; }
 .is-failed { box-shadow: inset 0 0 0 2px var(--err) !important; }
-.dir.is-sent, .rocker .is-sent, .segmented-bar .is-sent, .tool.is-sent { box-shadow: none !important; background: var(--ok-tint) !important; }
-.dir.is-failed, .rocker .is-failed, .segmented-bar .is-failed, .tool.is-failed { box-shadow: none !important; background: var(--err-tint) !important; }
+.dir.is-sent, .rocker .is-sent, .key.is-sent, .transport .is-sent, .tool.is-sent { box-shadow: none !important; background: var(--ok-tint) !important; }
+.dir.is-failed, .rocker .is-failed, .key.is-failed, .transport .is-failed, .tool.is-failed { box-shadow: none !important; background: var(--err-tint) !important; }
 
 /* Tomtilstand */
 .empty { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: var(--s-3); padding-bottom: var(--s-4); }
@@ -396,7 +394,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 }
 .button:active { transform: scale(0.98); background-color: var(--raised-hi); }
 .button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.button.primary:active { background: #f25d1d; }
+.button.primary:active { background: #3566dc; }
 .button.danger { background: var(--err); border-color: var(--err); color: var(--on-danger); }
 .button.danger:active { background: #f04f47; }
 .button:disabled { opacity: 0.55; cursor: default; }
@@ -411,7 +409,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
   padding: var(--s-2) var(--s-4) calc(var(--s-5) + env(safe-area-inset-bottom));
   border: 1px solid var(--edge);
   border-bottom: 0;
-  border-radius: 20px 20px 0 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 -12px 40px rgb(0 0 0 / 0.45);
@@ -482,7 +480,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .sheet > .button { width: 100%; }
 
 /* Skjema */
-.segmented { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-2); }
+.segmented { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); }
 .segmented legend, .field-label { display: block; font-size: var(--t-s); font-weight: 600; color: var(--muted); margin: var(--s-3) 0 var(--s-2); padding: 0; }
 .segmented label { position: relative; }
 .segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; }
@@ -501,9 +499,13 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .field:focus { border-color: var(--text); outline: none; box-shadow: 0 0 0 1px var(--text); }
 form .button { width: 100%; margin-top: var(--s-5); }
 
-/* Kort melding ved feil på en enkeltkommando */
+/* Kort melding ved feil på en enkeltkommando. Vises som popover i øverste lag, så den ligger over åpne ark. */
 .toast {
   position: fixed;
+  inset: auto auto auto 50%;
+  margin: 0;
+  border: 0;
+  overflow: visible;
   left: 50%;
   bottom: calc(var(--s-5) + env(safe-area-inset-bottom));
   max-width: min(calc(100vw - 2 * var(--s-4)), 440px);
@@ -523,6 +525,20 @@ form .button { width: 100%; margin-top: var(--s-5); }
   z-index: 10;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.has-action:where(:popover-open, .show) { display: flex; align-items: center; gap: var(--s-3); padding-right: var(--s-2); }
+.toast.has-action.show { pointer-events: auto; }
+.toast-action {
+  flex: none;
+  min-height: 40px;
+  padding: 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--t-s);
+  font-weight: 700;
+}
+.hint.error { color: var(--err); font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -591,6 +607,7 @@ form .button { width: 100%; margin-top: var(--s-5); }
 
 /* Skriv og søk */
 .field.large { min-height: 56px; font-size: var(--t-l); }
+.field.code { text-align: center; font-size: 28px; letter-spacing: 0.3em; text-transform: uppercase; }
 .text-actions { display: grid; grid-template-columns: 1fr auto auto; gap: var(--s-2); margin-top: var(--s-2); }
 #textForm .text-actions .button { width: auto; margin-top: 0; }
 .button.icon-only { width: 56px !important; padding: 0; }
@@ -642,25 +659,27 @@ form .button { width: 100%; margin-top: var(--s-5); }
 .yt-meta { font-size: var(--t-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Forsiden: søkefelt og «Spilles nå» øverst */
-.home-top { display: grid; gap: var(--s-2); margin-top: var(--s-1); }
+/* Søk, apper og kontroller ligger samlet nederst ved tommelen; ledig høyde havner under topplinjen. */
+#homeTop:not([hidden]) + .remote { margin-top: 0; }
+.home-top { display: grid; gap: var(--s-2); margin-top: auto; padding-top: var(--s-1); }
 .search-pill {
-  height: 52px;
+  height: 46px;
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  padding: 0 var(--s-2) 0 var(--s-4);
+  padding: 0 var(--s-1) 0 var(--s-4);
   border: 0;
   border-radius: var(--r-full);
   background: var(--surface);
-  border: 1px solid var(--edge);
   color: var(--muted);
   text-align: left;
   transition-property: background-color;
   transition-duration: var(--press);
 }
-.search-pill > span:first-of-type { flex: 1; font-size: var(--t-m); }
+.search-pill > span:first-of-type { flex: 1; font-size: var(--t-s); font-weight: 600; }
+.search-pill > .icon { width: 20px; height: 20px; }
 .search-pill:active { background: var(--raised); }
-.search-pill-mic { width: var(--tap); height: var(--tap); display: grid; place-items: center; border-radius: var(--r-full); color: var(--text); }
+.search-pill-mic { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--r-full); color: var(--text); }
 .search-pill-mic:active { background: var(--raised-hi); }
 
 .nowbar {
@@ -720,6 +739,24 @@ body.yt-open { overflow: hidden; }
 .nowbar.floating { margin: 0 var(--s-3) var(--s-3); }
 
 .yt-recent { padding: var(--s-2) var(--s-2) 0; }
+/* Forslag mens brukeren skriver */
+.yt-suggest { list-style: none; margin: var(--s-1) 0 0; padding: 0; display: grid; }
+.yt-suggestion {
+  width: 100%;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  font-size: var(--t-m);
+  text-align: left;
+}
+.yt-suggestion span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yt-suggestion .icon { flex: none; width: 18px; height: 18px; color: var(--muted); }
+.yt-suggestion:active { background: var(--raised); }
 .yt-recent-head { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
 .yt-recent-head h2 { font-size: var(--t-s); font-weight: 600; color: var(--muted); }
 .link-button { min-height: var(--tap); padding: 0 var(--s-2); border: 0; background: none; color: var(--muted); font-size: var(--t-s); }
@@ -745,23 +782,23 @@ body.yt-open { overflow: hidden; }
 .home-recent .chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .home-recent .chip .icon { width: 16px; height: 16px; }
 
-/* Høye skjermer: knappene vokser og mellomrommene øker (med tak), så det ikke blir
-   et tomt felt midt på. Lave skjermer skjuler siste søk på forsiden for å spare plass. */
+/* Høye skjermer (f.eks. Galaxy S Plus/Ultra og A-serien): litt større knapper og luft, med tak.
+   Lave skjermer skjuler siste søk på forsiden for å spare plass. */
 @media (max-height: 759px) {
   .home-recent { display: none; }
 }
-@media (min-height: 760px) {
-  .segmented-bar button { min-height: 58px; }
-  .segmented-bar.transport button { min-height: 54px; }
-  .tool { min-height: 54px; }
-  .tool .icon { width: 22px; height: 22px; }
-  .app-icon.m { width: 56px; height: 56px; border-radius: 16px; }
+@media (min-height: 820px) {
+  .key { min-height: 52px; }
+  .transport button { height: 48px; }
+  .tool { min-height: 56px; }
+  .app-icon.m { width: 54px; height: 54px; border-radius: 16px; }
 }
-/* Svært lave skjermer (f.eks. 320×568): tettere, og verktøylinjen får ikon og tekst på én linje. */
-@media (max-height: 600px) {
-  .remote { gap: var(--s-2); padding-top: var(--s-2); }
-  .tool { flex-direction: row; gap: 6px; }
+/* Svært lave skjermer (f.eks. 320×568): tettere, og snarveiene får ikon og tekst på én linje. */
+@media (max-height: 640px) {
+  .remote { gap: var(--s-2); padding-top: var(--s-1); }
+  .deck { gap: var(--s-2); padding: var(--s-2); border-radius: var(--r-l); }
+  .tool { flex-direction: row; gap: 6px; min-height: 44px; }
   .tool .icon { width: 18px; height: 18px; }
-  .segmented-bar button { min-height: 48px; }
-  .segmented-bar.transport button { min-height: var(--tap); }
+  .key { min-height: var(--tap); }
+  .transport button { height: 40px; }
 }

@@ -98,8 +98,10 @@ class MainActivity : ComponentActivity() {
         val keyStore = KeyStore(File(filesDir, "lg-keys.json"))
         lg = LgSession(keyStore, scope, ::log)
         val samsung = SamsungSession(keyStore, scope, ::log)
+        // Appens eget klientsertifikat for Android TV ligger i privat lagring (utelatt fra sikkerhetskopi).
+        val androidtv = AndroidTvSession(keyStore, File(filesDir, "androidtv-client.json"), scope, ::log, appMemory = AppMemory(File(filesDir, "androidtv-apps.json")))
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager
-        bridge = Bridge(lg, samsung, Ssdp(wifi), scope, ::log, about = "Fjern ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        bridge = Bridge(lg, samsung, androidtv, Ssdp(wifi), scope, ::log, about = "Fjern ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
 
         webView = WebView(this)
         webView.setBackgroundColor(getColor(R.color.bg))

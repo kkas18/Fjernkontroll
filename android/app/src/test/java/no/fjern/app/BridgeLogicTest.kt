@@ -162,6 +162,18 @@ class BridgeLogicTest {
         assertThrows { Validate.inputId("../x") }
     }
 
+    @Test fun `YouTube-forslag tolkes likt som i Node-broen`() {
+        val body = org.json.JSONArray().put("blå").put(org.json.JSONArray(listOf("blå", "blåfjell", "Blåfjell", "  blålys  ", 42, "", "x".repeat(300), "a", "b", "c", "d"))).toString()
+        val list = YouTube.parseSuggestions(body, "blå")
+        assertEquals(listOf("blåfjell", "blålys", "x".repeat(100)), list.take(3))
+        assertEquals(YouTube.MAX_SUGGESTIONS, list.size)
+        listOf("", "ikke json", "{}", "[1, 2]", "null").forEach { assertEquals(it, emptyList<String>(), YouTube.parseSuggestions(it)) }
+        val url = java.net.URI(YouTube.suggestUrl("lofi & øl"))
+        assertEquals("suggestqueries.google.com", url.host)
+        assertTrue(url.rawQuery, url.rawQuery.endsWith("&q=lofi%20%26%20%C3%B8l"))
+        assertTrue("ytsuggest" in Bridge.ROUTES)
+    }
+
     @Test fun `feilsøkingsloggen har tak`() {
         repeat(200) { Diagnostics.add("linje $it") }
         val lines = Diagnostics.snapshot()
