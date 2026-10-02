@@ -11,6 +11,7 @@ import { searchYoutube, thumbnailUrl, validVideoId } from './lib/youtube.mjs';
 import { createIconCache, fetchBytes, sniffImage } from './lib/icons.mjs';
 import { createDiscovery } from './lib/ssdp.mjs';
 import { LG_EXTRA_KEYS, createKeyStore, createLgSession } from './lib/lg.mjs';
+import { SAMSUNG_EXTRA_KEYS, createSamsungSession, samsungProbe } from './lib/samsung.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
@@ -81,7 +82,12 @@ export function createBridge({
   fetchImpl = fetch,
   keyStore = createKeyStore(path.join(dataDir, 'lg-keys.json')),
   lg = createLgSession({ keyStore, log }),
-  discover = createDiscovery({ log, probeRoku: (host) => rokuProbe(host, { fetchImpl }) }),
+  samsung = createSamsungSession({ keyStore, log, fetchImpl }),
+  discover = createDiscovery({
+    log,
+    probeRoku: (host) => rokuProbe(host, { fetchImpl }),
+    probeSamsung: (host) => samsungProbe(host, { fetchImpl }),
+  }),
   rokuHealthTtl = 10_000,
 } = {}) {
   let selected = null;
@@ -90,11 +96,18 @@ export function createBridge({
   const icons = createIconCache();
   keyStore.protect?.();
 
+  // LG og Samsung har en varig forbindelse med samme grensesnitt (connect, command, apps …); Roku styres med enkeltkall.
+  const sessions = { lg, samsung };
+  const tvSession = (device = selected) => sessions[device?.type] || null;
+  const disconnectOthers = (type) => {
+    for (const [name, session] of Object.entries(sessions)) if (name !== type) session.disconnect();
+  };
+
   // Standardnavn byttes ut med TV-ens modellnavn når det er kjent (brukerens egne navn settes i appen).
-  const DEFAULT_NAMES = /^(LG-TV|LG webOS|Roku)( · .*)?$/;
+  const DEFAULT_NAMES = /^(LG-TV|LG webOS|Roku|Samsung-TV)( · .*)?$/;
   const publicDevice = (device) => {
     if (!device) return device;
-    const model = device.type === 'lg' && lg.model;
+    const model = tvSession(device)?.model;
     const name = model && DEFAULT_NAMES.test(device.name) ? model : device.name;
     return { type: device.type, host: device.host, name };
   };
@@ -105,7 +118,10 @@ export function createBridge({
     const cached = icons.get(key);
     if (cached) return cached;
     let bytes;
-    if (selected.type === 'lg') {
+    if (selected.type === 'samsung') {
+      // Samsung deler ikke appikonene over nettet; grensesnittet viser merkefarge og kortnavn.
+      throw new UserError('Fant ikke ikonet.', 404);
+    } else if (selected.type === 'lg') {
       const url = lg.iconUrl(id);
       if (!url) throw new UserError('Fant ikke ikonet.', 404);
       try {
@@ -151,7 +167,8 @@ export function createBridge({
         inputs: selected.isTv !== false, search: 'youtube', keys: [...ROKU_EXTRA_KEYS],
       };
     }
-    return { playPause: 'single', channels: true, powerOn: lg.canWake, apps: true, inputs: true, search: 'youtube', keys: [...LG_EXTRA_KEYS] };
+    const keys = selected.type === 'samsung' ? SAMSUNG_EXTRA_KEYS : LG_EXTRA_KEYS;
+    return { playPause: 'single', channels: true, powerOn: tvSession().canWake, apps: true, inputs: true, search: 'youtube', keys: [...keys] };
   }
 
   async function status() {
@@ -166,7 +183,8 @@ export function createBridge({
         capabilities: capabilities(),
       };
     }
-    return { device: publicDevice(selected), ready: lg.ready, state: lg.state, code: lg.code, capabilities: capabilities() };
+    const tv = tvSession();
+    return { device: publicDevice(selected), ready: tv.ready, state: tv.state, code: tv.code, capabilities: capabilities() };
   }
 
   async function withRoku(action) {
@@ -206,7 +224,7 @@ export function createBridge({
     if (route === '/api/inputs') {
       if (req.method !== 'GET') throw new UserError('Metoden støttes ikke.', 405);
       if (!selected) throw new UserError('Velg en TV først.', 409);
-      if (selected.type === 'lg') return sendJson(res, 200, { inputs: await lg.inputs() });
+      if (tvSession()) return sendJson(res, 200, { inputs: await tvSession().inputs() });
       // Roku: innganger er «apper» av typen tvin (HDMI, antenne).
       if (!rokuAppList.length) rokuAppList = await withRoku(() => rokuApps(selected.host, { fetchImpl }));
       return sendJson(res, 200, { inputs: rokuAppList.filter((app) => app.id.startsWith('tvinput.')).map(({ id, name }) => ({ id, name, connected: true })) });
@@ -218,7 +236,7 @@ export function createBridge({
         return sendJson(res, 200, { about: `Fjern ${version} · Node ${process.version} · ${process.platform}`, lines: diagnostics.lines.slice() });
       }
       if (!selected) throw new UserError('Velg en TV først.', 409);
-      const apps = selected.type === 'lg' ? await lg.apps() : await withRoku(() => rokuApps(selected.host, { fetchImpl }));
+      const apps = tvSession() ? await tvSession().apps() : await withRoku(() => rokuApps(selected.host, { fetchImpl }));
       if (selected.type === 'roku') rokuAppList = apps;
       return sendJson(res, 200, { apps });
     }
@@ -232,28 +250,30 @@ export function createBridge({
         const device = validDevice(input.device);
         if (device.type === 'roku') {
           const probed = await rokuProbe(device.host, { fetchImpl });
-          lg.disconnect();
+          disconnectOthers('roku');
           selected = probed;
           rokuAppList = [];
           markRoku(true);
         } else {
+          disconnectOthers(device.type);
           selected = device;
-          log(`LG: kobler til ${device.host}`);
-          await lg.connect(device.host);
+          log(`${device.type === 'lg' ? 'LG' : 'Samsung'}: kobler til ${device.host}`);
+          await tvSession(device).connect(device.host);
         }
         return sendJson(res, 200, await status());
       }
       case '/api/repair': {
-        // «Par på nytt» etter endret sertifikat: glem lagret nøkkel og avtrykk, og koble til.
-        if (selected?.type !== 'lg') throw new UserError('Bare LG-TV-er kan pares på nytt.', 409);
-        await lg.forget(selected.host);
-        await lg.connect(selected.host);
+        // «Par på nytt» etter endret sertifikat: glem lagret nøkkel/token og avtrykk, og koble til.
+        const tv = tvSession();
+        if (!tv) throw new UserError('Bare LG- og Samsung-TV-er kan pares på nytt.', 409);
+        await tv.forget(selected.host);
+        await tv.connect(selected.host);
         return sendJson(res, 200, await status());
       }
       case '/api/input': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
         const id = validInputId(input.id);
-        if (selected.type === 'lg') await lg.switchInput(id);
+        if (tvSession()) await tvSession().switchInput(id);
         else {
           if (!rokuAppList.some((app) => app.id === id && id.startsWith('tvinput.'))) throw new UserError('Ukjent inngang.', 404);
           await withRoku(() => rokuLaunch(selected.host, id, { fetchImpl }));
@@ -265,14 +285,14 @@ export function createBridge({
       case '/api/ytplay': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
         const id = validVideoId(input.id);
-        if (selected.type === 'lg') await lg.playYoutube(id);
+        if (tvSession()) await tvSession().playYoutube(id);
         else await withRoku(() => rokuPlayYoutube(selected.host, id, { fetchImpl }));
         return sendJson(res, 200, { ok: true });
       }
       case '/api/launch': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
         const id = validAppId(input.id);
-        if (selected.type === 'lg') await lg.launch(id);
+        if (tvSession()) await tvSession().launch(id);
         else {
           if (!rokuAppList.some((app) => app.id === id)) throw new UserError('Ukjent app.', 404);
           await withRoku(() => rokuLaunch(selected.host, id, { fetchImpl }));
@@ -282,9 +302,10 @@ export function createBridge({
       case '/api/command': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
         const key = validCommand(input.key);
-        if (selected.type === 'lg') {
-          if (key === 'PowerOn') await lg.powerOn(selected.host);
-          else await lg.command(key);
+        const tv = tvSession();
+        if (tv) {
+          if (key === 'PowerOn') await tv.powerOn(selected.host);
+          else await tv.command(key);
         } else {
           await withRoku(() => rokuCommand(selected.host, key, { fetchImpl }));
         }
@@ -293,7 +314,7 @@ export function createBridge({
       case '/api/text': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
         const text = validText(input.text);
-        if (selected.type === 'lg') await lg.text(text);
+        if (tvSession()) await tvSession().text(text);
         else await withRoku(() => rokuText(selected.host, text, { fetchImpl }));
         return sendJson(res, 200, { ok: true });
       }
@@ -352,7 +373,7 @@ export function createBridge({
     }
   });
 
-  server.on('close', () => lg.disconnect());
+  server.on('close', () => Object.values(sessions).forEach((session) => session.disconnect()));
   return server;
 }
 

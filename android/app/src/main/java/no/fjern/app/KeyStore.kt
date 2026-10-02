@@ -5,11 +5,11 @@ import java.io.File
 import java.util.UUID
 
 /**
- * Paringsnøkkel, sertifikatavtrykk og MAC per LG-TV. Filen ligger i appens private lagring
+ * Paringsnøkkel (LG) eller token (Samsung, lagret under «samsung:<ip>»), sertifikatavtrykk og MAC per TV. Filen ligger i appens private lagring
  * (ingen andre apper kan lese den) og er utelatt fra sikkerhetskopi. Skrivinger er serialisert.
  */
 class KeyStore(private val file: File) {
-    data class Entry(val key: String? = null, val fingerprint: String? = null, val mac: String? = null, val rev: Int = 0)
+    data class Entry(val key: String? = null, val fingerprint: String? = null, val mac: String? = null, val rev: Int = 0, val token: String? = null)
 
     private val lock = Any()
 
@@ -31,16 +31,23 @@ class KeyStore(private val file: File) {
 
     fun get(host: String): Entry? = synchronized(lock) {
         val value = read().optJSONObject(host) ?: return null
-        Entry(value.optString("key").ifEmpty { null }, value.optString("fingerprint").ifEmpty { null }, value.optString("mac").ifEmpty { null }, value.optInt("rev", 0))
+        Entry(
+            value.optString("key").ifEmpty { null },
+            value.optString("fingerprint").ifEmpty { null },
+            value.optString("mac").ifEmpty { null },
+            value.optInt("rev", 0),
+            value.optString("token").ifEmpty { null },
+        )
     }
 
-    fun update(host: String, key: String? = null, fingerprint: String? = null, mac: String? = null, rev: Int? = null) = synchronized(lock) {
+    fun update(host: String, key: String? = null, fingerprint: String? = null, mac: String? = null, rev: Int? = null, token: String? = null) = synchronized(lock) {
         val all = read()
         val entry = all.optJSONObject(host) ?: JSONObject()
         key?.let { entry.put("key", it) }
         fingerprint?.let { entry.put("fingerprint", it) }
         mac?.let { entry.put("mac", it) }
         rev?.let { entry.put("rev", it) }
+        token?.let { entry.put("token", it) }
         all.put(host, entry)
         write(all)
     }

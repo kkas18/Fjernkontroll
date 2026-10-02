@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { addRecent, MAX_RECENT, BRIDGE_DOWN, brandFor, defaultFavorites, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode } from '../public/logic.js';
+import { addRecent, MAX_RECENT, BRIDGE_DOWN, DEFAULT_NAMES, brandFor, defaultFavorites, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode, typeLabel } from '../public/logic.js';
 import { isPrivateIPv4 as serverIsPrivate } from '../lib/validate.mjs';
 
 test('klient og bro er enige om hva som er en lokal IP', () => {
@@ -90,6 +90,15 @@ test('bokstavikon og navn', () => {
   const tv = { type: 'lg', host: '192.168.0.3', name: 'LG OLED55C1' };
   assert.equal(displayName(tv, [{ ...tv, customName: 'Stue' }]), 'Stue');
   assert.equal(displayName(tv, []), 'LG OLED55C1');
+});
+
+test('Samsung er en gyldig TV-type med eget navn og etikett', () => {
+  assert.equal(isValidDevice({ type: 'samsung', host: '192.168.1.50' }), true);
+  assert.equal(isValidDevice({ type: 'sony', host: '192.168.1.50' }), false);
+  assert.equal(typeLabel('samsung'), 'Samsung');
+  assert.equal(normalizeName({ type: 'samsung', host: '192.168.1.50' }), DEFAULT_NAMES.samsung);
+  assert.equal(noticeFor({ bridge: true, device: {}, ready: false, message: 'Trykk «Tillat» på TV-skjermen.' }).tone, 'busy', 'venting på «Tillat» er ikke en feil');
+  assert.equal(noticeFor({ bridge: true, device: {}, ready: false, message: 'x', code: 'cert-changed' }).action.id, 'repair');
 });
 
 test('reserveikoner for kjente apper har merkefarge, kortnavn og lesbar hvit tekst', () => {

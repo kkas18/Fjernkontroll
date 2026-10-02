@@ -11,7 +11,7 @@ class Ssdp(private val wifi: WifiManager?) {
     companion object {
         const val MAX_DEVICES = 32
         private const val MULTICAST = "239.255.255.250"
-        private val TARGETS = listOf("roku:ecp", "urn:lge-com:service:webos-second-screen:1", "ssdp:all")
+        private val TARGETS = listOf("roku:ecp", "urn:lge-com:service:webos-second-screen:1", "urn:samsung.com:device:RemoteControlReceiver:1", "ssdp:all")
 
         fun classify(message: String, host: String): Device? {
             if (!Validate.isPrivateIPv4(host)) return null
@@ -19,6 +19,8 @@ class Ssdp(private val wifi: WifiManager?) {
             return when {
                 "roku" in text -> Device("roku", host, "Roku")
                 "webos" in text || "lge-com" in text -> Device("lg", host, "LG-TV")
+                // Bare Samsungs fjernkontrolltjeneste: mobiler, lydplanker og skrivere fra Samsung svarer også på SSDP.
+                "urn:samsung.com:device:remotecontrolreceiver" in text -> Device("samsung", host, "Samsung-TV")
                 else -> null
             }
         }

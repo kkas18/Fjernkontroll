@@ -97,8 +97,9 @@ class MainActivity : ComponentActivity() {
 
         val keyStore = KeyStore(File(filesDir, "lg-keys.json"))
         lg = LgSession(keyStore, scope, ::log)
+        val samsung = SamsungSession(keyStore, scope, ::log)
         val wifi = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager
-        bridge = Bridge(lg, Ssdp(wifi), scope, ::log, about = "Fjern ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        bridge = Bridge(lg, samsung, Ssdp(wifi), scope, ::log, about = "Fjern ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
 
         webView = WebView(this)
         webView.setBackgroundColor(getColor(R.color.bg))

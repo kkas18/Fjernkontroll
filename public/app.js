@@ -1,6 +1,6 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
 import {
-  addRecent, BRIDGE_DOWN, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
+  addRecent, BRIDGE_DOWN, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
   normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, typeLabel,
 } from './logic.js';
 
@@ -611,9 +611,12 @@ function openPower() {
   $('#powerOff').disabled = !state.ready;
   const hints = [];
   if (!caps.powerOn) {
-    hints.push(state.device?.type === 'lg'
+    const type = state.device?.type;
+    hints.push(type === 'lg'
       ? 'Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på via Wi‑Fi» er aktivert på TV-en.'
-      : 'Denne Roku-enheten kan ikke slås på via nettverket.');
+      : type === 'samsung'
+        ? 'Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på med mobil» er aktivert (Innstillinger → Generelt → Nettverk → Ekspertinnstillinger).'
+        : 'Denne Roku-enheten kan ikke slås på via nettverket.');
   }
   hints.push('TV-en kan ikke alltid slås på igjen via nettverket etter at den er slått av.');
   $('#powerHint').textContent = hints.join(' ');
@@ -700,7 +703,7 @@ $('#manualForm').addEventListener('submit', (event) => {
   }
   closeSheet($('#manualDialog'));
   closeSheet($('#devicesSheet'));
-  connect({ type, host, name: type === 'lg' ? 'LG-TV' : 'Roku' });
+  connect({ type, host, name: DEFAULT_NAMES[type] });
 });
 
 // «Skriv på TV» ligger i «Mer»; arket byttes uten animasjon så to ark ikke står oppå hverandre.

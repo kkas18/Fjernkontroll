@@ -16,6 +16,7 @@ import org.json.JSONObject
  */
 class Bridge(
     private val lg: LgSession,
+    private val samsung: SamsungSession,
     private val ssdp: Ssdp,
     private val scope: CoroutineScope,
     private val log: (String) -> Unit = {},
@@ -29,11 +30,21 @@ class Bridge(
     private var scan: Deferred<List<Device>>? = null
 
     private val icons = Icons.Cache()
-    private val defaultNames = Regex("^(LG-TV|LG webOS|Roku)( · .*)?$")
+    private val defaultNames = Regex("^(LG-TV|LG webOS|Roku|Samsung-TV)( · .*)?$")
+
+    /** LG og Samsung har en varig forbindelse; Roku styres med enkeltkall. Kobler fra de andre typene. */
+    private suspend fun disconnectOthers(type: String) {
+        if (type != "lg") lg.disconnect()
+        if (type != "samsung") samsung.disconnect()
+    }
 
     /** Standardnavn byttes ut med TV-ens modellnavn når det er kjent (brukerens egne navn settes i appen). */
     private fun Device.toJson(): JSONObject {
-        val model = if (type == "lg") lg.model else null
+        val model = when (type) {
+            "lg" -> lg.model
+            "samsung" -> samsung.model
+            else -> null
+        }
         val shown = if (model != null && defaultNames.matches(name)) model else name
         return JSONObject().put("type", type).put("host", host).put("name", shown)
     }
@@ -57,6 +68,8 @@ class Bridge(
         val device = lock.withLock { selected } ?: throw UserError("Velg en TV først.", 409)
         val key = "${device.type}:${device.host}:$id"
         icons.get(key)?.let { return it }
+        // Samsung deler ikke appikonene over nettet; grensesnittet viser merkefarge og kortnavn.
+        if (device.type == "samsung") throw UserError("Fant ikke ikonet.", 404)
         val bytes = if (device.type == "lg") {
             lg.icon(id)
         } else {
@@ -93,11 +106,12 @@ class Bridge(
         throw e
     }
 
-    private fun capabilities(device: Device) = if (device.type == "roku") {
-        JSONObject().put("playPause", "single").put("channels", device.isTv != false).put("powerOn", device.isTv == true).put("apps", true)
+    private fun capabilities(device: Device) = when (device.type) {
+        "roku" -> JSONObject().put("playPause", "single").put("channels", device.isTv != false).put("powerOn", device.isTv == true).put("apps", true)
             .put("inputs", device.isTv != false).put("search", "youtube").put("keys", JSONArray(Roku.EXTRA_KEYS))
-    } else {
-        JSONObject().put("playPause", "single").put("channels", true).put("powerOn", lg.canWake).put("apps", true)
+        "samsung" -> JSONObject().put("playPause", "single").put("channels", true).put("powerOn", samsung.canWake).put("apps", true)
+            .put("inputs", true).put("search", "youtube").put("keys", JSONArray(SamsungSession.EXTRA_KEYS))
+        else -> JSONObject().put("playPause", "single").put("channels", true).put("powerOn", lg.canWake).put("apps", true)
             .put("inputs", true).put("search", "youtube").put("keys", JSONArray(LgSession.EXTRA_KEYS))
     }
 
@@ -109,6 +123,8 @@ class Bridge(
             result.put("ready", ok)
                 .put("state", if (ok) "Tilkoblet" else "Roku svarer ikke. Sjekk at TV-en er på og på samme Wi‑Fi.")
                 .put("code", if (ok) JSONObject.NULL else "unreachable")
+        } else if (device.type == "samsung") {
+            result.put("ready", samsung.ready).put("state", samsung.status).put("code", samsung.code ?: JSONObject.NULL)
         } else {
             result.put("ready", lg.ready).put("state", lg.status).put("code", lg.code ?: JSONObject.NULL)
         }
@@ -116,20 +132,33 @@ class Bridge(
 
     private suspend fun discover(): List<Device> {
         val running = scan?.takeIf { it.isActive } ?: scope.async(Dispatchers.IO) {
-            ssdp.search().map { d -> if (d.type == "roku") runCatching { Roku.probe(d.host) }.getOrDefault(d) else d }
+            // Funne enheter bekreftes og får navnet sitt fra TV-en selv; feiler det, beholdes standardnavnet.
+            ssdp.search().map { d ->
+                when (d.type) {
+                    "roku" -> runCatching { Roku.probe(d.host) }.getOrDefault(d)
+                    "samsung" -> runCatching { SamsungSession.probe(d.host) }.getOrDefault(d)
+                    else -> d
+                }
+            }
         }.also { scan = it }
         return running.await()
     }
 
-    /** Appen er tilbake i forgrunnen, eller nettverket er tilbake: sørg for at LG-forbindelsen lever. */
+    /** Appen er tilbake i forgrunnen, eller nettverket er tilbake: sørg for at TV-forbindelsen lever. */
     suspend fun onForeground() {
         val device = lock.withLock { selected } ?: return
-        if (device.type == "lg") lg.ensureConnected(device.host)
-        else rokuHealth = Triple(null, false, 0L) // tving ny helsesjekk
+        when (device.type) {
+            "lg" -> lg.ensureConnected(device.host)
+            "samsung" -> samsung.ensureConnected(device.host)
+            else -> rokuHealth = Triple(null, false, 0L) // tving ny helsesjekk
+        }
     }
 
     suspend fun onBackground() {
-        if (lock.withLock { selected }?.type == "lg") lg.pauseReconnect()
+        when (lock.withLock { selected }?.type) {
+            "lg" -> lg.pauseReconnect()
+            "samsung" -> samsung.pauseReconnect()
+        }
     }
 
     /** Hovedinngang: rute og eventuell JSON-kropp inn, status og JSON ut. */
@@ -167,6 +196,8 @@ class Bridge(
             val device = selected ?: throw UserError("Velg en TV først.", 409)
             val inputs = if (device.type == "lg") {
                 lg.inputs()
+            } else if (device.type == "samsung") {
+                samsung.inputs()
             } else {
                 // Roku: innganger er «apper» av typen tvin (HDMI, antenne).
                 if (rokuApps.isEmpty()) rokuApps = withRoku { Roku.apps(device.host) }
@@ -178,7 +209,11 @@ class Bridge(
         }
         if (route == "apps") {
             val device = selected ?: throw UserError("Velg en TV først.", 409)
-            val apps = if (device.type == "lg") lg.apps() else withRoku { Roku.apps(device.host) }.also { rokuApps = it }
+            val apps = when (device.type) {
+                "lg" -> lg.apps()
+                "samsung" -> samsung.apps()
+                else -> withRoku { Roku.apps(device.host) }.also { rokuApps = it }
+            }
             return JSONObject().put("apps", apps.toJson())
         }
         val body = input ?: throw UserError("Metoden støttes ikke.", 405)
@@ -188,27 +223,41 @@ class Bridge(
                 val device = Validate.device(raw.optString("type"), raw.optString("host"), raw.optString("name"))
                 if (device.type == "roku") {
                     val probed = withContext(Dispatchers.IO) { Roku.probe(device.host) }
-                    lg.disconnect()
+                    disconnectOthers("roku")
                     selected = probed
                     rokuApps = emptyList()
                     markRoku(true)
                 } else {
+                    disconnectOthers(device.type)
                     selected = device
-                    log("LG: kobler til ${device.host}")
-                    lg.connect(device.host)
+                    if (device.type == "samsung") {
+                        log("Samsung: kobler til ${device.host}")
+                        samsung.connect(device.host)
+                    } else {
+                        log("LG: kobler til ${device.host}")
+                        lg.connect(device.host)
+                    }
                 }
                 status()
             }
             "repair" -> {
-                val device = selected?.takeIf { it.type == "lg" } ?: throw UserError("Bare LG-TV-er kan pares på nytt.", 409)
-                withContext(Dispatchers.IO) { lg.forget(device.host) }
-                lg.connect(device.host)
+                // «Par på nytt» etter endret sertifikat: glem lagret nøkkel/token og avtrykk, og koble til.
+                val device = selected?.takeIf { it.type == "lg" || it.type == "samsung" }
+                    ?: throw UserError("Bare LG- og Samsung-TV-er kan pares på nytt.", 409)
+                if (device.type == "samsung") {
+                    withContext(Dispatchers.IO) { samsung.forget(device.host) }
+                    samsung.connect(device.host)
+                } else {
+                    withContext(Dispatchers.IO) { lg.forget(device.host) }
+                    lg.connect(device.host)
+                }
                 status()
             }
             "input" -> {
                 val device = selected ?: throw UserError("Velg en TV først.", 409)
                 val id = Validate.inputId(body.optString("id"))
                 if (device.type == "lg") lg.switchInput(id)
+                else if (device.type == "samsung") samsung.switchInput(id)
                 else {
                     if (rokuApps.none { it.id == id && id.startsWith("tvinput.") }) throw UserError("Ukjent inngang.", 404)
                     withRoku { Roku.launch(device.host, id) }
@@ -218,13 +267,18 @@ class Bridge(
             "ytplay" -> {
                 val device = selected ?: throw UserError("Velg en TV først.", 409)
                 val id = YouTube.videoId(body.optString("id"))
-                if (device.type == "lg") lg.playYoutube(id) else withRoku { Roku.playYoutube(device.host, id) }
+                when (device.type) {
+                    "lg" -> lg.playYoutube(id)
+                    "samsung" -> samsung.playYoutube(id)
+                    else -> withRoku { Roku.playYoutube(device.host, id) }
+                }
                 JSONObject().put("ok", true)
             }
             "launch" -> {
                 val device = selected ?: throw UserError("Velg en TV først.", 409)
                 val id = Validate.appId(body.optString("id"))
                 if (device.type == "lg") lg.launch(id)
+                else if (device.type == "samsung") samsung.launch(id)
                 else {
                     if (rokuApps.none { it.id == id }) throw UserError("Ukjent app.", 404)
                     withRoku { Roku.launch(device.host, id) }
@@ -236,6 +290,8 @@ class Bridge(
                 val key = Validate.command(body.optString("key"))
                 if (device.type == "lg") {
                     if (key == "PowerOn") lg.powerOn(device.host) else lg.command(key)
+                } else if (device.type == "samsung") {
+                    if (key == "PowerOn") samsung.powerOn(device.host) else samsung.command(key)
                 } else {
                     withRoku { Roku.command(device.host, key) }
                 }
@@ -244,7 +300,11 @@ class Bridge(
             "text" -> {
                 val device = selected ?: throw UserError("Velg en TV først.", 409)
                 val text = Validate.text(body.optString("text"))
-                if (device.type == "lg") lg.text(text) else withRoku { Roku.text(device.host, text) }
+                when (device.type) {
+                    "lg" -> lg.text(text)
+                    "samsung" -> samsung.text(text)
+                    else -> withRoku { Roku.text(device.host, text) }
+                }
                 JSONObject().put("ok", true)
             }
             else -> throw UserError("Ukjent adresse.", 404)

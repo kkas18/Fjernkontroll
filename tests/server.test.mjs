@@ -27,6 +27,27 @@ const fakeLg = {
   async forget(host) { calls.push(['lg-forget', host]); },
 };
 
+const fakeSamsung = {
+  ready: false,
+  state: 'Frakoblet',
+  code: null,
+  canWake: true,
+  model: null,
+  disconnects: 0,
+  async connect(host) { calls.push(['samsung-connect', host]); this.ready = true; this.state = 'Tilkoblet'; this.model = 'Samsung QE55Q80B'; },
+  disconnect() { this.disconnects += 1; this.ready = false; this.state = 'Frakoblet'; this.model = null; },
+  async command(key) { calls.push(['samsung', key]); },
+  async powerOn(host) { calls.push(['samsung-wake', host]); },
+  async text(value) { calls.push(['samsung-text', value]); },
+  async apps() { return [{ id: '3201907018807', name: 'Netflix', system: false, color: null }]; },
+  async launch(id) { calls.push(['samsung-launch', id]); },
+  async inputs() { return [{ id: 'KEY_HDMI1', name: 'HDMI 1', connected: true }]; },
+  async switchInput(id) { calls.push(['samsung-input', id]); },
+  async playYoutube(id) { calls.push(['samsung-yt', id]); },
+  iconUrl: () => null,
+  async forget(host) { calls.push(['samsung-forget', host]); },
+};
+
 const fakeFetch = async (url, options = {}) => {
   calls.push(['fetch', options.method || 'GET', url]);
   if (url.startsWith('https://www.youtube.com/results')) {
@@ -53,6 +74,7 @@ before(async () => {
   iconPort = iconServer.address().port;
   server = createBridge({
     lg: fakeLg,
+    samsung: fakeSamsung,
     keyStore: { protect: async () => {} },
     fetchImpl: fakeFetch,
     discover: async () => [{ type: 'roku', host: '192.168.1.5', name: 'Roku' }],
@@ -190,7 +212,41 @@ test('LG: kobler til, capabilities, feil, slå på, apper og ny paring', async (
   assert.deepEqual(calls, [['lg-forget', '192.168.1.42'], ['lg-connect', '192.168.1.42']]);
 });
 
-test('ny paring er bare for LG', async () => {
+test('Samsung: kobler til, capabilities, taster, apper, innganger, YouTube, tekst og ny paring', async () => {
+  const connect = await post('/api/connect', { device: { type: 'samsung', host: '192.168.1.50', name: 'Samsung-TV' } });
+  assert.equal(connect.status, 200);
+  assert.deepEqual(connect.json.device, { type: 'samsung', host: '192.168.1.50', name: 'Samsung QE55Q80B' }, 'modellnavnet erstatter standardnavnet');
+  assert.equal(connect.json.ready, true);
+  assert.equal(connect.json.capabilities.powerOn, true);
+  assert.ok(connect.json.capabilities.keys.includes('Blue'));
+  assert.ok(!connect.json.capabilities.keys.includes('Recent'), 'Samsung har ingen «siste apper»-tast');
+  assert.equal(fakeLg.ready, false, 'LG kobles fra når Samsung velges');
+
+  calls.length = 0;
+  await post('/api/command', { key: 'Up' });
+  await post('/api/command', { key: 'PowerOn' });
+  await post('/api/launch', { id: '3201907018807' });
+  await post('/api/input', { id: 'KEY_HDMI1' });
+  await post('/api/ytplay', { id: 'n61ULEU7CO0' });
+  await post('/api/text', { text: 'hei' });
+  assert.deepEqual(calls, [
+    ['samsung', 'Up'], ['samsung-wake', '192.168.1.50'], ['samsung-launch', '3201907018807'],
+    ['samsung-input', 'KEY_HDMI1'], ['samsung-yt', 'n61ULEU7CO0'], ['samsung-text', 'hei'],
+  ]);
+  assert.deepEqual((await request('/api/apps')).json.apps.map((a) => a.name), ['Netflix']);
+  assert.deepEqual((await request('/api/inputs')).json.inputs.map((i) => i.id), ['KEY_HDMI1']);
+  assert.equal((await request('/api/icon/3201907018807')).status, 404, 'merkefarge i stedet for ikon');
+
+  calls.length = 0;
+  assert.equal((await post('/api/repair')).status, 200);
+  assert.deepEqual(calls, [['samsung-forget', '192.168.1.50'], ['samsung-connect', '192.168.1.50']]);
+
+  const before = fakeSamsung.disconnects;
+  await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42' } });
+  assert.equal(fakeSamsung.disconnects, before + 1, 'Samsung kobles fra når LG velges');
+});
+
+test('ny paring er ikke for Roku', async () => {
   await post('/api/connect', { device: { type: 'roku', host: '192.168.1.5' } });
   assert.equal((await post('/api/repair')).status, 409);
 });
