@@ -225,7 +225,7 @@ function render() {
   $('#deviceMeta').hidden = !device;
   $('#deviceMeta').textContent = device ? typeLabel(device.type) : '';
   $('#deviceButton').setAttribute('aria-label', device ? `${name}, ${typeLabel(device.type)} på ${device.host}. Bytt TV` : 'Velg TV');
-  $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code ? 'err' : 'busy') : 'off';
+  $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code && state.code !== 'needs-code' ? 'err' : 'busy') : 'off';
 
   const notice = noticeFor(state);
   $('#notice').hidden = !notice.text;
@@ -246,6 +246,26 @@ function render() {
 
   renderApps();
   announce();
+  promptPairing();
+}
+
+// Android TV: når boksen viser paringskoden, åpnes kodevinduet av seg selv (én gang per paring).
+let pairPrompted = false;
+function promptPairing() {
+  const waiting = state.code === 'needs-code' && state.device?.type === 'androidtv';
+  if (!waiting) {
+    pairPrompted = false;
+    return;
+  }
+  if (pairPrompted || document.querySelector('dialog[open]')) return;
+  pairPrompted = true;
+  openPair();
+}
+
+function openPair() {
+  $('#pairCode').value = '';
+  $('#pairDialog').showModal();
+  $('#pairCode').focus();
 }
 
 // Favoritter lagres per TV i brukerens rekkefølge.
@@ -616,7 +636,9 @@ function openPower() {
       ? 'Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på via Wi‑Fi» er aktivert på TV-en.'
       : type === 'samsung'
         ? 'Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på med mobil» er aktivert (Innstillinger → Generelt → Nettverk → Ekspertinnstillinger).'
-        : 'Denne Roku-enheten kan ikke slås på via nettverket.');
+        : type === 'androidtv'
+          ? 'Android TV kan bare slås på mens appen er koblet til den. Bruk fjernkontrollen eller TV-en.'
+          : 'Denne Roku-enheten kan ikke slås på via nettverket.');
   }
   hints.push('TV-en kan ikke alltid slås på igjen via nettverket etter at den er slått av.');
   $('#powerHint').textContent = hints.join(' ');
@@ -635,8 +657,38 @@ $$('[data-close]').forEach((el) => el.addEventListener('click', () => closeSheet
 
 $('#noticeAction').addEventListener('click', (event) => {
   if (!state.device) return;
-  if (event.currentTarget.dataset.action === 'repair') connect(state.device, { route: 'repair' });
+  const action = event.currentTarget.dataset.action;
+  if (action === 'pair') openPair();
+  else if (action === 'repair') connect(state.device, { route: 'repair' });
   else connect(state.device);
+});
+
+$('#pairCode').addEventListener('input', (event) => {
+  // Koden er heksadesimal: store bokstaver, bare 0–9 og A–F.
+  const input = event.currentTarget;
+  input.value = input.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 6);
+});
+$('#pairForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const code = $('#pairCode').value.trim();
+  if (code.length !== 6) {
+    toast('Koden er seks tegn, slik den vises på TV-en.');
+    $('#pairCode').focus();
+    return;
+  }
+  const button = $('#pairSubmit');
+  button.disabled = true;
+  try {
+    applyStatus(await api('pair', { code }));
+    closeSheet($('#pairDialog'));
+    toast('Paret. Kobler til …');
+  } catch (error) {
+    toast(error.message);
+    $('#pairCode').select();
+  } finally {
+    button.disabled = false;
+    render();
+  }
 });
 
 $('#diagOpen').addEventListener('click', async () => {

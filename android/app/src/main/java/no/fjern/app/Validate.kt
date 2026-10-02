@@ -27,7 +27,7 @@ object Validate {
         return a == 10 || (a == 172 && b in 16..31) || (a == 192 && b == 168)
     }
 
-    private val DEFAULT_NAMES = mapOf("roku" to "Roku", "lg" to "LG webOS", "samsung" to "Samsung-TV")
+    private val DEFAULT_NAMES = mapOf("roku" to "Roku", "lg" to "LG webOS", "samsung" to "Samsung-TV", "androidtv" to "Android TV")
 
     fun device(type: String?, host: String?, name: String?): Device {
         val fallback = type?.let { DEFAULT_NAMES[it] }

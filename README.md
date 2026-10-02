@@ -1,6 +1,6 @@
 # Fjern
 
-Fjernkontroll for **Roku**, **LG webOS** og **Samsung** (Tizen) som kjører på din egen Android-telefon. Appen er en installerbar PWA, og en liten lokal bro i Node sender kommandoene til TV-en over Wi‑Fi. Ingen konto, sky eller npm-pakker.
+Fjernkontroll for **Roku**, **LG webOS**, **Samsung** (Tizen) og **Android TV / Google TV** (for eksempel Telia-boksen) som kjører på din egen Android-telefon. Appen er en installerbar PWA, og en liten lokal bro i Node sender kommandoene til TV-en over Wi‑Fi. Ingen konto, sky eller npm-pakker.
 
 ## Installer på Android (APK, anbefalt)
 
@@ -50,11 +50,14 @@ Oppdater med `cd ~/fjern && git pull`.
 | Node | 20 eller nyere |
 | Roku | *Settings → System → Advanced system settings → Control by mobile apps* må være på |
 | LG webOS | Godkjenn paringen på TV-en første gang. Strøm på via nettverket støttes ikke |
+| Android TV / Google TV | For eksempel Telia-boksen. Første gang viser TV-en en sekstegnskode som du skriver inn i appen. Etter det kobler appen til uten kode |
 | Samsung | Tizen, modeller fra 2016 og nyere. Trykk **Tillat** når TV-en spør første gang. Har du trykket **Avvis**: *Innstillinger → Generelt → Ekstern enhetsbehandling → Enhetstilkoblingsbehandling*. «Slå på» krever *Slå på med mobil* (*Innstillinger → Generelt → Nettverk → Ekspertinnstillinger*) |
 
-Google TV, Sony, eldre Samsung-modeller (før 2016) og rene IR-TV-er støttes ikke.
+Eldre Samsung-modeller (før 2016), Apple TV og rene IR-TV-er støttes ikke. Sony og Philips med Android TV / Google TV styres som Android TV.
 
 På Samsung finnes ikke appikoner over nettet, så appene vises med merkefarge og kortnavn. Innganger er kildemenyen og HDMI 1–4.
+
+På Android TV har protokollen ingen appliste. Appen viser snarveier til vanlige strømmetjenester (YouTube, Netflix, NRK TV, TV 2 Play, Disney+, Max, Prime Video, Viaplay), som åpnes med applenker. Er en app ikke installert på boksen, skjer ingenting. «Skriv på TV» virker når skjermtastaturet er åpent på boksen, og «Slå på» bare mens appen er koblet til (boksen i hvilemodus).
 
 ## Hvorfor en lokal bro?
 
@@ -70,6 +73,7 @@ Grensesnittet bruker [Manrope](https://github.com/sharanda/manrope), som ligger 
 - Den snakker bare med private IPv4-adresser (10/8, 172.16/12, 192.168/16), og bare med kommandoer fra en fast liste.
 - Streng `Content-Security-Policy` og andre sikkerhetshoder på alle svar.
 - LG-paringsnøkler og Samsung-tokens lagres i `data/lg-keys.json` med tilgang bare for eieren (0600). Mappen er utelatt fra git.
+- Android TV: appen lager sitt eget klientsertifikat (RSA 2048, selvsignert) første gang, lagret i `data/androidtv-client.json` (0600) eller i appens private lagring på Android. Boksen husker sertifikatet etter paring med kode. Boksens eget sertifikat låses ved første tilkobling på samme måte som for LG og Samsung.
 - LG webOS med nyere firmware bruker `wss://` på port 3001 med et selvsignert sertifikat. Sertifikatets avtrykk **låses ved første paring** (trust on first use). Endres det senere, stopper broen tilkoblingen og ber deg pare på nytt, og en låst TV nedgraderes aldri til ukryptert `ws://`. Eldre modeller uten `wss://` bruker `ws://` på port 3000.
 - Samsung bruker samme prinsipp: `wss://` på port 8002 med token og låst sertifikat for TV-er som krever token (de fleste fra 2018), ellers `ws://` på port 8001. Tokenet sendes aldri over ukryptert forbindelse.
 - Svar fra lokalnettet har tak: maks 32 enheter per søk og 64 KB per svar fra en Roku.
@@ -86,7 +90,7 @@ npm run verify   # syntakssjekk + tester (kjøres også i CI)
 | Mappe | Innhold |
 | --- | --- |
 | `server.mjs` | HTTP-broen: statiske filer, API og sikkerhetshoder |
-| `lib/` | Roku (ECP), LG (SSAP), Samsung (Tizen-fjernkontroll), SSDP-søk, WebSocket-klient, validering og feilmeldinger |
+| `lib/` | Roku (ECP), LG (SSAP), Samsung (Tizen-fjernkontroll), Android TV (Remote v2 med protobuf og eget sertifikat), SSDP- og mDNS-søk, WebSocket-klient, validering og feilmeldinger |
 | `public/` | Grensesnittet: HTML, CSS, JS, service worker, manifest og ikoner. Brukes av både PWA og APK |
 | `android/` | Android-appen: WebView med grensesnittet og broen skrevet i Kotlin (`app/src/main/java/no/fjern/app/`) |
 | `tests/` | Enhets- og integrasjonstester |

@@ -12,6 +12,8 @@ import { createIconCache, fetchBytes, sniffImage } from './lib/icons.mjs';
 import { createDiscovery } from './lib/ssdp.mjs';
 import { LG_EXTRA_KEYS, createKeyStore, createLgSession } from './lib/lg.mjs';
 import { SAMSUNG_EXTRA_KEYS, createSamsungSession, samsungProbe } from './lib/samsung.mjs';
+import { ANDROIDTV_EXTRA_KEYS, createAndroidTvSession, createIdentityStore } from './lib/androidtv.mjs';
+import { searchAndroidTv } from './lib/mdns.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
@@ -83,10 +85,13 @@ export function createBridge({
   keyStore = createKeyStore(path.join(dataDir, 'lg-keys.json')),
   lg = createLgSession({ keyStore, log }),
   samsung = createSamsungSession({ keyStore, log, fetchImpl }),
+  // Appens eget klientsertifikat for Android TV; lages første gang det trengs.
+  androidtv = createAndroidTvSession({ keyStore, identity: createIdentityStore(path.join(dataDir, 'androidtv-client.json')), log }),
   discover = createDiscovery({
     log,
     probeRoku: (host) => rokuProbe(host, { fetchImpl }),
     probeSamsung: (host) => samsungProbe(host, { fetchImpl }),
+    extraSearches: [searchAndroidTv],
   }),
   rokuHealthTtl = 10_000,
 } = {}) {
@@ -96,15 +101,17 @@ export function createBridge({
   const icons = createIconCache();
   keyStore.protect?.();
 
-  // LG og Samsung har en varig forbindelse med samme grensesnitt (connect, command, apps …); Roku styres med enkeltkall.
-  const sessions = { lg, samsung };
+  // LG, Samsung og Android TV har en varig forbindelse med samme grensesnitt (connect, command, apps …);
+  // Roku styres med enkeltkall.
+  const sessions = { lg, samsung, androidtv };
+  const LABELS = { lg: 'LG', samsung: 'Samsung', androidtv: 'Android TV' };
   const tvSession = (device = selected) => sessions[device?.type] || null;
   const disconnectOthers = (type) => {
     for (const [name, session] of Object.entries(sessions)) if (name !== type) session.disconnect();
   };
 
   // Standardnavn byttes ut med TV-ens modellnavn når det er kjent (brukerens egne navn settes i appen).
-  const DEFAULT_NAMES = /^(LG-TV|LG webOS|Roku|Samsung-TV)( · .*)?$/;
+  const DEFAULT_NAMES = /^(LG-TV|LG webOS|Roku|Samsung-TV|Android TV)( · .*)?$/;
   const publicDevice = (device) => {
     if (!device) return device;
     const model = tvSession(device)?.model;
@@ -118,8 +125,8 @@ export function createBridge({
     const cached = icons.get(key);
     if (cached) return cached;
     let bytes;
-    if (selected.type === 'samsung') {
-      // Samsung deler ikke appikonene over nettet; grensesnittet viser merkefarge og kortnavn.
+    if (selected.type === 'samsung' || selected.type === 'androidtv') {
+      // Samsung og Android TV deler ikke appikonene over nettet; grensesnittet viser merkefarge og kortnavn.
       throw new UserError('Fant ikke ikonet.', 404);
     } else if (selected.type === 'lg') {
       const url = lg.iconUrl(id);
@@ -166,6 +173,10 @@ export function createBridge({
         playPause: 'single', channels: selected.isTv !== false, powerOn: selected.isTv === true, apps: true,
         inputs: selected.isTv !== false, search: 'youtube', keys: [...ROKU_EXTRA_KEYS],
       };
+    }
+    if (selected.type === 'androidtv') {
+      // En boks har ingen innganger å velge mellom.
+      return { playPause: 'single', channels: true, powerOn: androidtv.canWake, apps: true, inputs: false, search: 'youtube', keys: [...ANDROIDTV_EXTRA_KEYS] };
     }
     const keys = selected.type === 'samsung' ? SAMSUNG_EXTRA_KEYS : LG_EXTRA_KEYS;
     return { playPause: 'single', channels: true, powerOn: tvSession().canWake, apps: true, inputs: true, search: 'youtube', keys: [...keys] };
@@ -257,7 +268,7 @@ export function createBridge({
         } else {
           disconnectOthers(device.type);
           selected = device;
-          log(`${device.type === 'lg' ? 'LG' : 'Samsung'}: kobler til ${device.host}`);
+          log(`${LABELS[device.type]}: kobler til ${device.host}`);
           await tvSession(device).connect(device.host);
         }
         return sendJson(res, 200, await status());
@@ -265,9 +276,15 @@ export function createBridge({
       case '/api/repair': {
         // «Par på nytt» etter endret sertifikat: glem lagret nøkkel/token og avtrykk, og koble til.
         const tv = tvSession();
-        if (!tv) throw new UserError('Bare LG- og Samsung-TV-er kan pares på nytt.', 409);
+        if (!tv) throw new UserError('Bare LG, Samsung og Android TV kan pares på nytt.', 409);
         await tv.forget(selected.host);
         await tv.connect(selected.host);
+        return sendJson(res, 200, await status());
+      }
+      case '/api/pair': {
+        // Android TV: koden som vises på skjermen under paring.
+        if (selected?.type !== 'androidtv') throw new UserError('Bare Android TV pares med kode.', 409);
+        await androidtv.finishPairing(String(input.code ?? '').slice(0, 12));
         return sendJson(res, 200, await status());
       }
       case '/api/input': {

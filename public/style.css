@@ -482,7 +482,7 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .sheet > .button { width: 100%; }
 
 /* Skjema */
-.segmented { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-2); }
+.segmented { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); }
 .segmented legend, .field-label { display: block; font-size: var(--t-s); font-weight: 600; color: var(--muted); margin: var(--s-3) 0 var(--s-2); padding: 0; }
 .segmented label { position: relative; }
 .segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; }
@@ -591,6 +591,7 @@ form .button { width: 100%; margin-top: var(--s-5); }
 
 /* Skriv og søk */
 .field.large { min-height: 56px; font-size: var(--t-l); }
+.field.code { text-align: center; font-size: 28px; letter-spacing: 0.3em; text-transform: uppercase; }
 .text-actions { display: grid; grid-template-columns: 1fr auto auto; gap: var(--s-2); margin-top: var(--s-2); }
 #textForm .text-actions .button { width: auto; margin-top: 0; }
 .button.icon-only { width: 56px !important; padding: 0; }

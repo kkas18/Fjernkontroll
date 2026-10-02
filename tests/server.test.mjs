@@ -48,6 +48,30 @@ const fakeSamsung = {
   async forget(host) { calls.push(['samsung-forget', host]); },
 };
 
+const fakeAndroidTv = {
+  ready: false,
+  state: 'Frakoblet',
+  code: null,
+  canWake: false,
+  model: null,
+  async connect(host) { calls.push(['atv-connect', host]); this.ready = false; this.state = 'Skriv inn koden som vises på TV-en.'; this.code = 'needs-code'; },
+  disconnect() { this.ready = false; this.state = 'Frakoblet'; this.code = null; },
+  async finishPairing(code) {
+    if (code !== 'A1B2C3') throw new UserError('Feil kode. Sjekk koden på TV-en og prøv igjen.');
+    calls.push(['atv-pair', code]); this.ready = true; this.state = 'Tilkoblet'; this.code = null; this.canWake = true; this.model = 'Telia Play-boks';
+  },
+  async command(key) { calls.push(['atv', key]); },
+  async powerOn() { calls.push(['atv-wake']); },
+  async text(value) { calls.push(['atv-text', value]); },
+  async apps() { return [{ id: 'netflix', name: 'Netflix', system: false, color: null }]; },
+  async launch(id) { calls.push(['atv-launch', id]); },
+  async inputs() { return []; },
+  async switchInput() { throw new UserError('Android TV har ingen innganger å velge.', 404); },
+  async playYoutube(id) { calls.push(['atv-yt', id]); },
+  iconUrl: () => null,
+  async forget(host) { calls.push(['atv-forget', host]); },
+};
+
 const fakeFetch = async (url, options = {}) => {
   calls.push(['fetch', options.method || 'GET', url]);
   if (url.startsWith('https://www.youtube.com/results')) {
@@ -75,6 +99,7 @@ before(async () => {
   server = createBridge({
     lg: fakeLg,
     samsung: fakeSamsung,
+    androidtv: fakeAndroidTv,
     keyStore: { protect: async () => {} },
     fetchImpl: fakeFetch,
     discover: async () => [{ type: 'roku', host: '192.168.1.5', name: 'Roku' }],
@@ -244,6 +269,26 @@ test('Samsung: kobler til, capabilities, taster, apper, innganger, YouTube, teks
   const before = fakeSamsung.disconnects;
   await post('/api/connect', { device: { type: 'lg', host: '192.168.1.42' } });
   assert.equal(fakeSamsung.disconnects, before + 1, 'Samsung kobles fra når LG velges');
+});
+
+test('Android TV: kode fra skjermen pares via /api/pair, deretter vanlige kommandoer', async () => {
+  const connect = await post('/api/connect', { device: { type: 'androidtv', host: '192.168.1.60', name: 'Android TV' } });
+  assert.equal(connect.json.code, 'needs-code');
+  assert.equal(connect.json.capabilities.inputs, false, 'en boks har ingen innganger');
+  assert.equal((await post('/api/pair', { code: 'FFFFFF' })).status, 400);
+  const paired = await post('/api/pair', { code: 'A1B2C3' });
+  assert.equal(paired.status, 200);
+  assert.equal(paired.json.ready, true);
+  assert.deepEqual(paired.json.device, { type: 'androidtv', host: '192.168.1.60', name: 'Telia Play-boks' });
+  assert.ok(paired.json.capabilities.keys.includes('Recent'));
+  calls.length = 0;
+  await post('/api/command', { key: 'Home' });
+  await post('/api/command', { key: 'PowerOn' });
+  await post('/api/ytplay', { id: 'n61ULEU7CO0' });
+  assert.deepEqual(calls, [['atv', 'Home'], ['atv-wake'], ['atv-yt', 'n61ULEU7CO0']]);
+  assert.equal((await request('/api/icon/netflix')).status, 404);
+  await post('/api/connect', { device: { type: 'roku', host: '192.168.1.5' } });
+  assert.equal((await post('/api/pair', { code: 'A1B2C3' })).status, 409, 'koder er bare for Android TV');
 });
 
 test('ny paring er ikke for Roku', async () => {

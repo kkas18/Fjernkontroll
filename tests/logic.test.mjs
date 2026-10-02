@@ -92,6 +92,14 @@ test('bokstavikon og navn', () => {
   assert.equal(displayName(tv, []), 'LG OLED55C1');
 });
 
+test('Android TV: gyldig type, og kode på skjermen gir handlingen «Skriv inn kode»', () => {
+  assert.equal(isValidDevice({ type: 'androidtv', host: '192.168.1.60' }), true);
+  assert.equal(typeLabel('androidtv'), 'Android TV');
+  assert.equal(DEFAULT_NAMES.androidtv, 'Android TV');
+  const notice = noticeFor({ bridge: true, device: {}, ready: false, message: 'Skriv inn koden som vises på TV-en.', code: 'needs-code' });
+  assert.deepEqual([notice.tone, notice.action.id], ['busy', 'pair']);
+});
+
 test('Samsung er en gyldig TV-type med eget navn og etikett', () => {
   assert.equal(isValidDevice({ type: 'samsung', host: '192.168.1.50' }), true);
   assert.equal(isValidDevice({ type: 'sony', host: '192.168.1.50' }), false);

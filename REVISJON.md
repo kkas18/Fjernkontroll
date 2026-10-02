@@ -312,3 +312,38 @@ Samsung Tizen (2016 og nyere) styres med fjernkontroll-API-et over WebSocket. De
     - LG: gjenoppkobling
 - Chromium: Samsung som valg under «Legg til med IP», og «Mer» uten «Siste apper».
 - **Ikke verifisert:** mot en ekte Samsung-TV. Protokollen følger samsungtvws, som er i bred bruk. Hvis noe ikke virker på din modell, send feilsøkingsloggen (*TV-er → Slik kobler du til → Vis feilsøkingslogg*).
+
+---
+
+## Runde 11 (v2.10.0): Android TV og Google TV (Telia-boksen)
+
+**Brukerens ønske:** Styre Telia Play-boksen med Fjern. Boksen er en Android TV-boks, som appen ikke støttet.
+
+### Løsning
+Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og androidtvremote2/Home Assistant bruker. Den er bygget likt i Node-broen (`lib/androidtv.mjs`) og Android-appen (`AndroidTv.kt`), uten nye avhengigheter.
+
+| Del | Hvordan |
+| --- | --- |
+| Identitet | Appen lager sitt eget klientsertifikat første gang (X.509 v3, RSA 2048, selvsignert, med egen DER-koding i `lib/x509.mjs` og `X509.kt`). Boksen kjenner det igjen etter paring |
+| Paring | TLS på port 6467. Boksen viser en sekstegnskode, og appen åpner kodevinduet av seg selv. Koden sjekkes lokalt (første byte av SHA-256 over begge offentlige nøkler) før hemmeligheten sendes |
+| Fjernkontroll | TLS på port 6466 med klientsertifikatet. Protobuf-meldinger: konfigurasjon, aktivering, ping, taster (Android KeyEvent), applenker og tekst (IME) |
+| Sikkerhet | Boksens sertifikat låses ved første tilkobling. Endres det, stopper appen og ber om ny paring |
+| Avvisning | En ukjent eller glemt klient, enten avvist i TLS-håndtrykket eller lukket uten svar (TLS 1.3), starter paring av seg selv |
+| Apper | Protokollen har ingen appliste. Appen viser snarveier via applenker: YouTube, Netflix, NRK TV, TV 2 Play, Disney+, Max, Prime Video og Viaplay. YouTube-søk spilles av med `youtube.com/watch`-lenke |
+| Søk | mDNS etter `_androidtvremote2._tcp.local` (egen DNS-tolker med komprimering), samtidig med SSDP |
+| Grensesnitt | «Android TV» under «Legg til med IP», kodevinduet, og merknaden «Skriv inn kode». «Kilde» er skjult, siden en boks ikke har innganger |
+
+### Verifisering
+- `npm run verify`: **125/125**. Nye tester:
+  - 19 mot en falsk Android TV over **ekte TLS med klientsertifikat**:
+    - paring (riktig og feil kode, avvist hemmelighet)
+    - avvisning i håndtrykket og ved lukking
+    - tilbakestilt boks som ber om ny kode
+    - taster, applenker og tekst med tellere
+    - gjenoppkobling og endret sertifikat
+  - protobuf, sertifikat og mDNS
+  - broens `/api/pair`
+- Kotlin: kompilert og kjørt på JVM, **29/29**. Nye tester for protobuf (samme bytes som Node), sertifikat, paringskode, taster og mDNS.
+- **Krysstest:** Kotlin-økten mot den falske boksen i Node over ekte TLS (ikke lagt til i repoet). Hele løpet besto: avvist ukjent klient, kode, paret, klar, taster, applenker, tekst og ny tilkobling uten kode.
+- Chromium: kodevinduet åpnes av seg selv. Ugyldige tegn filtreres, feil kode gir melding, og riktig kode kobler til.
+- **Ikke verifisert:** mot en ekte Telia-boks. Hvis noe ikke virker på din boks, send feilsøkingsloggen.

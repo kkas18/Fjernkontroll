@@ -1,9 +1,9 @@
 // Ren logikk uten DOM, delt mellom grensesnittet og testene (node:test).
 
-export const DEVICE_TYPES = Object.freeze(['roku', 'lg', 'samsung']);
-const TYPE_LABELS = Object.freeze({ roku: 'Roku', lg: 'LG webOS', samsung: 'Samsung' });
+export const DEVICE_TYPES = Object.freeze(['roku', 'lg', 'samsung', 'androidtv']);
+const TYPE_LABELS = Object.freeze({ roku: 'Roku', lg: 'LG webOS', samsung: 'Samsung', androidtv: 'Android TV' });
 // Standardnavn for en TV som legges til uten navn (brukeren kan gi den eget navn senere).
-export const DEFAULT_NAMES = Object.freeze({ roku: 'Roku', lg: 'LG-TV', samsung: 'Samsung-TV' });
+export const DEFAULT_NAMES = Object.freeze({ roku: 'Roku', lg: 'LG-TV', samsung: 'Samsung-TV', androidtv: 'Android TV' });
 
 export const typeLabel = (type) => TYPE_LABELS[type] || 'Roku';
 
@@ -28,6 +28,8 @@ export function noticeFor({ bridge, device, ready, message, code }) {
   if (!bridge) return { text: BRIDGE_DOWN, tone: 'err', action: null };
   if (!device || ready) return { text: '', tone: 'info', action: null };
   const text = message || 'Kobler til …';
+  // Android TV viser en kode på skjermen som må skrives inn i appen.
+  if (code === 'needs-code') return { text, tone: 'busy', action: { id: 'pair', label: 'Skriv inn kode' } };
   if (code === 'cert-changed' || code === 'needs-repair') return { text, tone: 'err', action: { id: 'repair', label: 'Par på nytt' } };
   // Alle feiltilstander får en vei videre, ikke bare en melding.
   if (code === 'unreachable' || ERROR_WORDS.test(text)) return { text, tone: 'err', action: { id: 'retry', label: 'Prøv igjen' } };
