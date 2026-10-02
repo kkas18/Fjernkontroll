@@ -74,6 +74,9 @@ const fakeAndroidTv = {
 
 const fakeFetch = async (url, options = {}) => {
   calls.push(['fetch', options.method || 'GET', url]);
+  if (url.startsWith('https://suggestqueries.google.com/')) {
+    return new Response(JSON.stringify([new URL(url).searchParams.get('q'), ['lofi', 'lofi girl', 'lofi beats']]));
+  }
   if (url.startsWith('https://www.youtube.com/results')) {
     const video = { videoId: 'n61ULEU7CO0', title: { runs: [{ text: 'Lofi' }] }, lengthText: { simpleText: '3:00' } };
     return new Response(`<script>var ytInitialData = ${JSON.stringify({ a: [{ videoRenderer: video }] })};</script>`);
@@ -336,6 +339,10 @@ test('søk og innganger', async () => {
   assert.equal(search.status, 200);
   assert.deepEqual(search.json.videos, [{ id: 'n61ULEU7CO0', title: 'Lofi', channel: '', duration: '3:00', views: '' }]);
   assert.equal((await post('/api/ytsearch', { query: '   ' })).status, 400);
+  const suggest = await post('/api/ytsuggest', { query: ' lofi ' });
+  assert.equal(suggest.status, 200);
+  assert.deepEqual(suggest.json.suggestions, ['lofi girl', 'lofi beats'], 'spørringen selv tas ikke med');
+  assert.equal((await post('/api/ytsuggest', { query: '' })).status, 400);
   calls.length = 0;
   assert.equal((await post('/api/ytplay', { id: 'n61ULEU7CO0' })).status, 200);
   assert.deepEqual(calls.at(-1), ['lg-yt', 'n61ULEU7CO0']);

@@ -889,25 +889,107 @@ async function playVideo(video, button) {
   }
 }
 
+// Søket går mens brukeren skriver: forslag til søkeord etter en kort pause, og treff litt etter.
+// Enter, et forslag eller talesøk gir et «fullt» søk som lagres i siste søk og skjuler tastaturet.
+const LIVE_MIN_CHARS = 2;
+const SUGGEST_DELAY = 200;
+const LIVE_DELAY = 550;
+const resultCache = new Map();
 let searchToken = 0;
-async function runSearch(query) {
+let suggestToken = 0;
+let suggestTimer = 0;
+let liveTimer = 0;
+
+function cacheResults(q, videos) {
+  resultCache.delete(q);
+  resultCache.set(q, videos);
+  if (resultCache.size > 30) resultCache.delete(resultCache.keys().next().value);
+}
+
+function hideSuggestions() {
+  suggestToken += 1;
+  clearTimeout(suggestTimer);
+  $('#ytSuggest').hidden = true;
+  $('#ytSuggest').replaceChildren();
+}
+
+function renderSuggestions(list) {
+  $('#ytSuggest').hidden = list.length === 0;
+  $('#ytSuggest').replaceChildren(...list.map((text) => {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'yt-suggestion';
+    button.setAttribute('aria-label', `Søk etter ${text}`);
+    const label = document.createElement('span');
+    label.textContent = text;
+    button.append(svgIcon('search'), label);
+    button.addEventListener('click', () => {
+      $('#ytQuery').value = text;
+      runSearch(text);
+    });
+    li.append(button);
+    return li;
+  }));
+}
+
+async function loadSuggestions(q) {
+  const token = ++suggestToken;
+  try {
+    const { suggestions } = await api('ytsuggest', { query: q });
+    if (token === suggestToken && $('#ytQuery').value.trim() === q) renderSuggestions((suggestions || []).slice(0, 4));
+  } catch {
+    // forslag er en bonus; ved feil vises bare ingen
+  }
+}
+
+async function runSearch(query, { live = false } = {}) {
   const q = query.trim();
   if (!q) return;
   const token = ++searchToken;
-  $('#ytQuery').blur(); // skjul mobiltastaturet så resultatene synes
-  rememberSearch(q);
-  $('#ytResults').replaceChildren();
+  clearTimeout(liveTimer);
+  if (!live) {
+    hideSuggestions();
+    $('#ytQuery').blur(); // skjul mobiltastaturet så resultatene synes
+    rememberSearch(q);
+  }
   $('#ytRecentBox').hidden = true;
-  $('#ytStatus').textContent = `Søker etter «${q}» …`;
-  try {
-    const { videos } = await api('ytsearch', { query: q });
-    if (token !== searchToken) return;
+  const show = (videos) => {
     $('#ytStatus').textContent = videos.length ? '' : `Ingen treff for «${q}».`;
     $('#ytResults').replaceChildren(...videos.map(videoRow));
     $('.ytview-body').scrollTop = 0;
+  };
+  const cached = resultCache.get(q);
+  if (cached) return show(cached);
+  // Mens brukeren skriver, står forrige treff til de nye kommer (ingen blinking).
+  if (!live || !$('#ytResults').children.length) {
+    $('#ytResults').replaceChildren();
+    $('#ytStatus').textContent = `Søker etter «${q}» …`;
+  }
+  try {
+    const { videos } = await api('ytsearch', { query: q });
+    cacheResults(q, videos);
+    if (token === searchToken) show(videos);
   } catch (error) {
     if (token === searchToken) $('#ytStatus').textContent = error.message;
   }
+}
+
+function onQueryInput() {
+  const q = $('#ytQuery').value.trim();
+  clearTimeout(suggestTimer);
+  clearTimeout(liveTimer);
+  if (!q) {
+    searchToken += 1;
+    hideSuggestions();
+    $('#ytResults').replaceChildren();
+    $('#ytStatus').textContent = '';
+    renderRecent();
+    return;
+  }
+  if (q.length < LIVE_MIN_CHARS) return;
+  suggestTimer = setTimeout(() => loadSuggestions(q), SUGGEST_DELAY);
+  liveTimer = setTimeout(() => runSearch(q, { live: true }), LIVE_DELAY);
 }
 
 // «Spilles nå»: liten linje med det som går på TV-en, både på forsiden og i YouTube-visningen.
@@ -1015,13 +1097,7 @@ $('#ytForm').addEventListener('submit', (event) => {
   event.preventDefault();
   runSearch($('#ytQuery').value);
 });
-$('#ytQuery').addEventListener('input', () => {
-  if (!$('#ytQuery').value) {
-    $('#ytResults').replaceChildren();
-    $('#ytStatus').textContent = '';
-    renderRecent();
-  }
-});
+$('#ytQuery').addEventListener('input', onQueryInput);
 $('#ytRecentClear').addEventListener('click', () => {
   storage.write(RECENT_KEY, []);
   renderRecent();

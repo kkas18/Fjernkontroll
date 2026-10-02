@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_RESULTS, parseSearchPage, searchYoutube, thumbnailUrl, tvVideoTarget, validVideoId } from '../lib/youtube.mjs';
+import { MAX_RESULTS, MAX_SUGGESTIONS, parseSearchPage, parseSuggestions, searchYoutube, suggestUrl, suggestYoutube, thumbnailUrl, tvVideoTarget, validVideoId } from '../lib/youtube.mjs';
 import { UserError } from '../lib/errors.mjs';
 
 // Forenklet utdrag av YouTubes søkeside: data ligger i ytInitialData, dypt nestet.
@@ -58,4 +58,21 @@ test('video-id valideres før den brukes i adresser', () => {
   assert.equal(tvVideoTarget('rFZHOHl-L8A'), 'https://www.youtube.com/tv?v=rFZHOHl-L8A');
   assert.equal(thumbnailUrl('rFZHOHl-L8A'), 'https://i.ytimg.com/vi/rFZHOHl-L8A/mqdefault.jpg');
   for (const bad of ['', 'kort', 'rFZHOHl-L8A&x=1', '../../etc/pa', null]) assert.throws(() => validVideoId(bad), UserError, String(bad));
+});
+
+test('forslag mens man skriver: tolkes trygt, uten duplikater og med tak', async () => {
+  const body = JSON.stringify(['blå', ['blå', 'blåfjell', 'Blåfjell', '  blålys  ', 42, '', 'x'.repeat(300), 'a', 'b', 'c', 'd'], [], {}]);
+  const list = parseSuggestions(body, 'blå');
+  assert.deepEqual(list.slice(0, 3), ['blåfjell', 'blålys', 'x'.repeat(100)]);
+  assert.equal(list.length, MAX_SUGGESTIONS);
+  for (const bad of ['', 'ikke json', '{}', '[1, 2]', 'null']) assert.deepEqual(parseSuggestions(bad), [], bad);
+  const url = new URL(suggestUrl('lofi & øl'));
+  assert.equal(url.searchParams.get('q'), 'lofi & øl');
+  assert.equal(url.searchParams.get('ds'), 'yt');
+  let seen;
+  const ok = await suggestYoutube('lofi', { fetchImpl: async (u) => { seen = u; return new Response(JSON.stringify(['lofi', ['lofi girl']])); } });
+  assert.deepEqual(ok, ['lofi girl']);
+  assert.match(seen, /^https:\/\/suggestqueries\.google\.com\//);
+  assert.deepEqual(await suggestYoutube('x', { fetchImpl: async () => { throw new TypeError('offline'); } }), [], 'feil gir tom liste');
+  assert.deepEqual(await suggestYoutube('x', { fetchImpl: async () => new Response('nei', { status: 500 }) }), []);
 });

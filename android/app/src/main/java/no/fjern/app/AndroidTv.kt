@@ -7,6 +7,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -52,6 +54,8 @@ class AndroidTvSession(
     private val pairingTimeoutMs: Long = 180_000,
     private val answerTimeoutMs: Long = 8000,
     private val reconnectDelays: List<Long> = listOf(1000, 2000, 4000, 8000, 16_000),
+    private val launchWaitMs: Long = 2500,
+    private val reconnectWaitMs: Long = 8000,
 ) {
     companion object {
         const val IDLE = "Frakoblet"
@@ -85,28 +89,31 @@ class AndroidTvSession(
         )
 
         /**
-         * Protokollen har ingen appliste. Appene åpnes med pakkenavnet via market://launch?id=…, som Play-butikken
-         * på boksen sender videre til appen (samme som androidtvremote2/Home Assistant). Nettadresser virker ikke
-         * på alle bokser: uten nettleser tar ingen imot dem. Ikonene ligger i public/icons/apps/. Samme liste som
-         * lib/androidtv.mjs.
+         * Protokollen har ingen appliste, og boksene tar imot ulike lenker. Hver app har flere lenker, som prøves i
+         * rekkefølge til boksen melder at appen er åpen: appens eget skjema først, så nettadressen, og
+         * market://launch?id=<pakke> sist (Play-butikken sluttet å åpne apper fra slike lenker i 2026). Samme liste
+         * som lib/androidtv.mjs. Ikonene ligger i public/icons/apps/.
          */
-        data class AppEntry(val id: String, val name: String, val pkg: String) {
-            val link get() = "market://launch?id=$pkg"
+        data class AppEntry(val id: String, val name: String, val pkg: String, private val own: List<String>) {
+            val links get() = own + "market://launch?id=$pkg"
             val icon get() = "/icons/apps/$id.png"
         }
         val APPS = listOf(
-            AppEntry("teliaplay", "Telia Play", "no.get.play.tv"),
-            AppEntry("nrktv", "NRK TV", "no.nrk.tv"),
-            AppEntry("tv2play", "TV 2 Play", "no.tv2.sumo"),
-            AppEntry("netflix", "Netflix", "com.netflix.ninja"),
-            AppEntry("youtube", "YouTube", "com.google.android.youtube.tv"),
-            AppEntry("disneyplus", "Disney+", "com.disney.disneyplus"),
-            AppEntry("max", "HBO Max", "com.wbd.stream"),
-            AppEntry("primevideo", "Prime Video", "com.amazon.amazonvideo.livingroom"),
-            AppEntry("viaplay", "Viaplay", "com.viaplay.android"),
-            AppEntry("spotify", "Spotify", "com.spotify.tv.android"),
-            AppEntry("appletv", "Apple TV", "com.apple.atve.androidtv.appletv"),
+            AppEntry("teliaplay", "Telia Play", "no.get.play.tv", listOf("https://www.teliaplay.no")),
+            AppEntry("nrktv", "NRK TV", "no.nrk.tv", listOf("nrktv://", "https://tv.nrk.no")),
+            AppEntry("tv2play", "TV 2 Play", "no.tv2.sumo", listOf("https://play.tv2.no")),
+            AppEntry("netflix", "Netflix", "com.netflix.ninja", listOf("netflix://", "https://www.netflix.com/title")),
+            AppEntry("youtube", "YouTube", "com.google.android.youtube.tv", listOf("vnd.youtube.launch://", "https://www.youtube.com")),
+            AppEntry("disneyplus", "Disney+", "com.disney.disneyplus", listOf("https://www.disneyplus.com")),
+            AppEntry("max", "HBO Max", "com.wbd.stream", listOf("https://play.hbomax.com", "hbomax://deeplink")),
+            AppEntry("primevideo", "Prime Video", "com.amazon.amazonvideo.livingroom", listOf("https://app.primevideo.com")),
+            AppEntry("viaplay", "Viaplay", "com.viaplay.android", listOf("viaplay://deeplink", "https://viaplay.no")),
+            AppEntry("spotify", "Spotify", "com.spotify.tv.android", listOf("spotify://")),
+            AppEntry("appletv", "Apple TV", "com.apple.atve.androidtv.appletv", listOf("https://tv.apple.com")),
         )
+        /** Når Play-butikken er det som åpnes, startet ikke appen. */
+        private val STORE_PACKAGES = setOf("com.android.vending", "com.google.android.finsky")
+        fun appNotOpened(name: String) = "Boksen åpnet ikke $name. Sjekk at appen er installert, eller åpne den med Hjem-knappen."
         const val NO_APP_LINKS = "Boksen tillater ikke at fjernkontroller åpner apper. Bruk Hjem-knappen og velg appen på TV-en."
 
         fun storeKey(host: String) = "androidtv:$host"
@@ -217,6 +224,12 @@ class AndroidTvSession(
     private var on: Boolean? = null
     private var ime: Pair<Long, Long>? = null
     private var features = FEATURES
+    /** Boksen melder hvilken app som er åpen (da kan vi se om en lenke virket). */
+    private var appReports = false
+    private var errors = 0
+    /** Lenken som sist åpnet hver app, per boks. */
+    private val working = HashMap<String, String>()
+    private val launchLock = Mutex()
     private var readyJob: Job? = null
     private var pairingJob: Job? = null
     private var reconnectJob: Job? = null
@@ -309,7 +322,7 @@ class AndroidTvSession(
         remote?.close()
         pairing?.close()
         host = null; remote = null; pairing = null; serverKey = null; ready = false; status = IDLE; code = null
-        model = null; on = null; ime = null; features = FEATURES; currentApp = null
+        model = null; on = null; ime = null; features = FEATURES; currentApp = null; appReports = false; errors = 0
     }
 
     suspend fun disconnect() = withContext(state) { resetLocked() }
@@ -372,12 +385,18 @@ class AndroidTvSession(
                 log("Android TV: klar")
             }
         }
-        if (fields.has(3)) log("Android TV: boksen meldte feil")
+        if (fields.has(3)) {
+            // RemoteError { value, message }: meldingen boksen ikke godtok. Feltnumrene logges for feilsøking.
+            errors += 1
+            val rejected = runCatching { fields.message(3)?.message(2)?.numbers() }.getOrNull().orEmpty()
+            log("Android TV: boksen meldte feil" + if (rejected.isEmpty()) "" else " (avviste felt ${rejected.joinToString(", ")})")
+        }
         if (fields.has(8)) conn.write(remotePingResponse(fields.message(8)?.long(1) ?: 0))
         if (fields.has(40)) on = (fields.message(40)?.long(1) ?: 0L) != 0L
         if (fields.has(20)) {
             // Boksen forteller hvilken app som er åpen (pakkenavn). Logges for feilsøking.
             val app = fields.message(20)?.message(1)?.text(12)
+            if (!app.isNullOrEmpty()) appReports = true
             if (!app.isNullOrEmpty() && app != currentApp) {
                 currentApp = app
                 log("Android TV: åpen app ${app.take(80)}")
@@ -599,12 +618,68 @@ class AndroidTvSession(
         if ((features and FEATURE_APP_LINK) == 0) throw UserError(NO_APP_LINKS, 409)
     }
 
-    suspend fun launch(id: String) = withContext(state) {
-        if (!ready) throw UserError(status, 409)
-        val app = APPS.firstOrNull { it.id == id } ?: throw UserError("Ukjent app.", 404)
-        ensureAppLinks()
-        log("Android TV: åpner ${app.pkg}")
-        send(remoteAppLink(app.link))
+    private suspend fun until(timeoutMs: Long, check: () -> Boolean): Boolean {
+        val end = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < end) {
+            if (check()) return true
+            delay(50)
+        }
+        return check()
+    }
+
+    /**
+     * Sender lenkene i rekkefølge til boksen melder at appen er åpen. Melder ikke boksen hvilken app som er åpen,
+     * sendes bare den første (eller den som virket sist). Gir true når åpningen er bekreftet.
+     */
+    suspend fun launch(id: String): Boolean = launchLock.withLock {
+        withContext(state) {
+            if (!ready) throw UserError(status, 409)
+            val app = APPS.firstOrNull { it.id == id } ?: throw UserError("Ukjent app.", 404)
+            ensureAppLinks()
+            val target = host
+            val key = "$target|${app.id}"
+            val links = (listOfNotNull(working[key]) + app.links).distinct()
+            if (!appReports) {
+                log("Android TV: åpner ${app.name} med ${links[0]} (boksen melder ikke hvilken app som er åpen)")
+                send(remoteAppLink(links[0]))
+                return@withContext false
+            }
+            fun opened(link: String?): Boolean {
+                if (link != null) working[key] = link
+                log("Android TV: ${app.name} er åpen")
+                return true
+            }
+            var previous: String? = null
+            for (link in links) {
+                if (host != target) throw UserError(LOST, 409)
+                if (!ready) {
+                    // Forbindelsen falt etter forrige lenke. Melder boksen etter ny tilkobling at appen er åpen,
+                    // virket forrige lenke likevel.
+                    if (!until(reconnectWaitMs) { ready }) break
+                    if (until(1000) { currentApp == app.pkg }) return@withContext opened(previous)
+                }
+                val socketBefore = remote
+                val errorsBefore = errors
+                if (currentApp == app.pkg) currentApp = null // må meldes på nytt
+                log("Android TV: åpner ${app.name} med $link")
+                send(remoteAppLink(link))
+                previous = link
+                var outcome = "ingen melding"
+                val open = until(launchWaitMs) {
+                    when {
+                        currentApp == app.pkg -> true
+                        remote !== socketBefore || !ready -> { outcome = "forbindelsen falt"; true }
+                        errors != errorsBefore -> { outcome = "boksen avviste lenken"; true }
+                        currentApp in STORE_PACKAGES -> { outcome = "Play-butikken åpnet"; true }
+                        else -> false
+                    }
+                } && currentApp == app.pkg
+                if (open) return@withContext opened(link)
+                log("Android TV: $link åpnet ikke appen ($outcome)")
+            }
+            working.remove(key)
+            throw UserError(appNotOpened(app.name), 502)
+        }
     }
 
     suspend fun playYoutube(videoId: String) = withContext(state) {

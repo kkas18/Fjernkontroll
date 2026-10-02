@@ -28,7 +28,7 @@ class Bridge(
         /** Alle ruter grensesnittet kan kalle. NativeBridge slipper bare disse gjennom (testet mot public/app.js). */
         val ROUTES = setOf(
             "status", "scan", "connect", "repair", "pair", "apps", "launch", "command", "text", "diagnostics",
-            "inputs", "input", "ytsearch", "ytplay",
+            "inputs", "input", "ytsearch", "ytsuggest", "ytplay",
         )
     }
 
@@ -196,6 +196,11 @@ class Bridge(
     private suspend fun dispatch(route: String, input: JSONObject?): JSONObject {
         if (route == "diagnostics") {
             return JSONObject().put("about", about).put("lines", JSONArray(Diagnostics.snapshot()))
+        }
+        if (route == "ytsuggest") {
+            val query = Validate.query(input?.optString("query"))
+            val suggestions = withContext(Dispatchers.IO) { YouTube.suggest(query) }
+            return JSONObject().put("suggestions", JSONArray(suggestions))
         }
         if (route == "ytsearch") {
             val query = Validate.query(input?.optString("query"))

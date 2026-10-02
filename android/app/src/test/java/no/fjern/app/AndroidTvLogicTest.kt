@@ -93,8 +93,8 @@ class AndroidTvLogicTest {
     }
 
     /**
-     * Regresjon: https-applenker startet ingenting på Telia-boksen. Appene åpnes med pakkenavn via Play-butikken,
-     * listen er den samme som i Node-broen, og hvert ikon finnes i public/icons/apps/.
+     * Regresjon: én fast lenke per app startet ingenting på Telia-boksen. Hver app har flere lenker med
+     * market://launch?id=<pakke> sist, listen er den samme som i Node-broen, og hvert ikon finnes i public/icons/apps/.
      */
     @Test fun appsLaunchByPackageAndMatchTheNodeBridge() {
         val node = repoFile("lib/androidtv.mjs").readText()
@@ -103,8 +103,10 @@ class AndroidTvLogicTest {
         assertEquals(AndroidTvSession.APPS.size, AndroidTvSession.APPS.map { it.id }.toSet().size)
         AndroidTvSession.APPS.forEach { app ->
             Validate.appId(app.id)
-            assertEquals("market://launch?id=${app.pkg}", app.link)
-            assertTrue("${app.id} mangler i lib/androidtv.mjs", node.contains("{ id: '${app.id}', name: '${app.name}', package: '${app.pkg}' }"))
+            assertEquals("market://launch?id=${app.pkg}", app.links.last())
+            assertTrue(app.id, app.links.size >= 2)
+            val own = app.links.dropLast(1).joinToString(", ") { "'$it'" }
+            assertTrue("${app.id} er ulik i lib/androidtv.mjs", node.contains("{ id: '${app.id}', name: '${app.name}', package: '${app.pkg}', links: [$own] }"))
             val icon = repoFile("public${app.icon}")
             assertArrayEquals(png, icon.readBytes().copyOfRange(0, 4))
         }

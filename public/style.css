@@ -726,6 +726,24 @@ body.yt-open { overflow: hidden; }
 .nowbar.floating { margin: 0 var(--s-3) var(--s-3); }
 
 .yt-recent { padding: var(--s-2) var(--s-2) 0; }
+/* Forslag mens brukeren skriver */
+.yt-suggest { list-style: none; margin: var(--s-1) 0 0; padding: 0; display: grid; }
+.yt-suggestion {
+  width: 100%;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  font-size: var(--t-m);
+  text-align: left;
+}
+.yt-suggestion span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yt-suggestion .icon { flex: none; width: 18px; height: 18px; color: var(--muted); }
+.yt-suggestion:active { background: var(--raised); }
 .yt-recent-head { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
 .yt-recent-head h2 { font-size: var(--t-s); font-weight: 600; color: var(--muted); }
 .link-button { min-height: var(--tap); padding: 0 var(--s-2); border: 0; background: none; color: var(--muted); font-size: var(--t-s); }

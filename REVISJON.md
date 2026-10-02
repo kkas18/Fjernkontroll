@@ -406,3 +406,39 @@ Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og an
 - Andre tester sjekker at hvert ikon er en ekte 128 px PNG, og at fremmede ikonstier avvises.
 - Kotlin: nye tester for pakkenavn, funksjonssnitt og ikonfiler. En test sjekker også at app-listen er lik Node-broens.
 - **Ikke verifisert:** mot en ekte Telia-boks. Startes en app fortsatt ikke, viser feilsøkingsloggen hva boksen oppgir at den støtter.
+
+### Rettet i 2.10.3: «Forbindelsen falt ut» når en app ble åpnet, og YouTube-søk mens man skriver
+**Brukerens tilbakemelding:** Med 2.10.2 viste appen «Forbindelsen falt ut. Kobler til igjen …» når en app ble trykket på (skjermbilde). Brukeren ønsket også at YouTube-søket skal vise treff fortløpende («live preview»).
+
+**Årsak:**
+- Google endret Play-butikken i august 2026, slik at `market://launch?id=<pakke>` ikke lenger åpner apper på mange bokser ([Home Assistant-forumet](https://community.home-assistant.io/t/android-tv-remote-no-longer-launching-apps/1021224), [dokumentasjonen](https://www.home-assistant.io/integrations/androidtv_remote/)). På Telia-boksen fikk lenken forbindelsen til å falle.
+- 2.10.2 brukte bare denne lenken.
+
+**Utbedring (apper):**
+- Hver app har flere lenker. Appens eget skjema kommer først (`nrktv://`, `netflix://`, `vnd.youtube.launch://`, `spotify://`, `viaplay://deeplink`, `hbomax://deeplink`), så nettadressen, og `market://` sist. Lenkene er hentet fra Home Assistants dokumentasjon og forum.
+- Appen sender én lenke om gangen og venter på at boksen melder at appen er åpen (`remote_ime_key_inject.app_info.app_package`).
+  - Avviser boksen lenken (`remote_error`), åpnes Play-butikken, eller kommer det ingen melding innen 2,5 s, prøves neste lenke.
+  - Faller forbindelsen, venter appen på ny tilkobling. Melder boksen da at appen er åpen, regnes forrige lenke som riktig, ellers prøves neste.
+  - Lenken som virket, huskes per boks og app og prøves først neste gang.
+  - Virker ingen av lenkene, får brukeren beskjed: «Boksen åpnet ikke …».
+  - Melder ikke boksen hvilken app som er åpen, sendes bare den første lenken, siden appen da ikke kan se om den virket.
+- `remote_error` logges med hvilket felt boksen avviste, og hvert forsøk logges med grunn.
+
+**Utbedring (YouTube):**
+- Forslag til søkeord vises etter 200 ms pause, og treff etter 550 ms. Det sendes ingen kall per tastetrykk, og søket starter fra to tegn.
+- Forrige treff står til de nye kommer, så listen ikke blinker. Svar på et utdatert søk forkastes.
+- De siste 30 søkene huskes i minnet.
+- Enter, et trykk på et forslag eller talesøk gir et vanlig søk, som lagres i «Siste søk». Søk mens man skriver, lagres ikke.
+- Forslagene kommer fra Googles forslagstjeneste (`suggestqueries.google.com`, `ds=yt`) via broen, gjennom den nye ruten `ytsuggest` i både Node og Kotlin. Feil gir bare ingen forslag.
+
+**Verifisert:**
+- `npm run verify`: **131/131**. Nye tester mot den falske boksen over TLS:
+  - lenker prøves til appen meldes åpen, og den som virket, brukes neste gang
+  - avvist lenke og frakobling på `market://` gir ny tilkobling og tydelig feil
+  - en boks som åpner appen og faller ut samtidig, regnes som åpnet
+- Kotlin: **35/35**. Ny live-test med falsk boks over ekte TLS (`AndroidTvLaunchLiveTest`) for de samme tilfellene, og en test av forslagene.
+- Chromium:
+  - Når «lofi» skrives, kommer forslag og treff uten Enter, med ett kall per pause.
+  - Et trykk på et forslag søker og skjuler forslagene.
+  - Et tomt felt viser «Siste søk».
+- **Ikke verifisert:** mot en ekte Telia-boks. Hvis en app fortsatt ikke åpnes, viser feilsøkingsloggen hver lenke som ble prøvd, og hva boksen svarte.

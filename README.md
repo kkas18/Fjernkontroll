@@ -39,7 +39,7 @@ Oppdater med `cd ~/fjern && git pull`.
 - Navigasjon, OK, Hjem, Tilbake, volum, kanal (skjules på Roku-spillere uten TV), lyd av og avspilling. Hold inne piler og volum for å gjenta.
 - **Apper:** snarveier til appene på TV-en, hentet direkte fra TV-en.
 - **Slå på og av:** Roku-TV-er slås på med `PowerOn`. LG slås på med Wake-on-LAN når TV-en har vært tilkoblet én gang og **Slå på via Wi‑Fi** er aktivert på TV-en (ofte under *Mobil TV på*; plasseringen varierer per modell).
-- **YouTube:** trykk på «Søk på YouTube» øverst (eller 🎤 for talesøk), og se resultatene med bilder på mobilen. Trykk på en video, så spilles den på TV-en, og «Spilles nå» viser hva som går. Søket leser YouTubes offentlige søkeside gjennom broen, uten konto eller API-nøkkel. Talesøk bruker telefonens egen talegjenkjenning i Android-appen, og Chromes i nettversjonen.
+- **YouTube:** trykk på «Søk på YouTube» øverst (eller 🎤 for talesøk), og se resultatene med bilder på mobilen. Treffene og forslag til søkeord kommer mens du skriver, uten å trykke Søk. Trykk på en video, så spilles den på TV-en, og «Spilles nå» viser hva som går. Søket leser YouTubes offentlige søkeside gjennom broen, og forslagene kommer fra Googles forslagstjeneste. Ingen konto eller API-nøkkel trengs. Talesøk bruker telefonens egen talegjenkjenning i Android-appen, og Chromes i nettversjonen.
 - **Skriv på TV** (under **Mer**): skriv i tekstfeltet som er åpent på TV-en, for eksempel et passord, og slett tegn eller trykk Enter.
 - **Automatisk gjenoppkobling** for LG når forbindelsen faller ut, og helsesjekk for Roku.
 
@@ -57,7 +57,7 @@ Eldre Samsung-modeller (før 2016), Apple TV og rene IR-TV-er støttes ikke. Son
 
 På Samsung finnes ikke appikoner over nettet, så appene vises med merkefarge og kortnavn. Innganger er kildemenyen og HDMI 1–4.
 
-På Android TV har protokollen ingen appliste. Appen viser snarveier til vanlige strømmetjenester med egne ikoner: Telia Play, NRK TV, TV 2 Play, Netflix, YouTube, Disney+, HBO Max, Prime Video, Viaplay, Spotify og Apple TV. De åpnes med pakkenavnet (`market://launch?id=…`), som Play-butikken på boksen sender videre til appen. Er en app ikke installert, åpner boksen siden for appen i Play-butikken. «Skriv på TV» virker når skjermtastaturet er åpent på boksen, og «Slå på» bare mens appen er koblet til (boksen i hvilemodus).
+På Android TV har protokollen ingen appliste. Appen viser snarveier til vanlige strømmetjenester med egne ikoner: Telia Play, NRK TV, TV 2 Play, Netflix, YouTube, Disney+, HBO Max, Prime Video, Viaplay, Spotify og Apple TV. Hver app har flere lenker: appens egen (for eksempel `nrktv://`), nettadressen og `market://launch?id=<pakke>`. Appen prøver dem i rekkefølge til boksen melder at appen er åpen, og husker hvilken som virket. Åpnes ikke appen, får du beskjed. Bokser som ikke melder hvilken app som er åpen, får bare den første lenken. «Skriv på TV» virker når skjermtastaturet er åpent på boksen, og «Slå på» bare mens appen er koblet til (boksen i hvilemodus).
 
 ## Hvorfor en lokal bro?
 

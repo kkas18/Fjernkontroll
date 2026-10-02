@@ -88,6 +88,36 @@ object YouTube {
         }
     }
 
+    /** Forslag til søkeord mens brukeren skriver, samme som lib/youtube.mjs. Feil gir tom liste. */
+    const val MAX_SUGGESTIONS = 6
+    fun suggestUrl(query: String) =
+        "https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&hl=nb&gl=no&ie=utf-8&oe=utf-8&q=${URLEncoder.encode(query, "UTF-8").replace("+", "%20")}"
+
+    fun parseSuggestions(body: String, query: String = ""): List<String> {
+        val list = runCatching { org.json.JSONArray(body).optJSONArray(1) }.getOrNull() ?: return emptyList()
+        val seen = mutableSetOf(query.trim().lowercase())
+        val out = mutableListOf<String>()
+        for (i in 0 until list.length()) {
+            val value = (list.opt(i) as? String)?.trim()?.take(100) ?: continue
+            if (value.isEmpty() || !seen.add(value.lowercase())) continue
+            out += value
+            if (out.size >= MAX_SUGGESTIONS) break
+        }
+        return out
+    }
+
+    fun suggest(query: String): List<String> = runCatching {
+        val connection = URL(suggestUrl(query)).openConnection() as HttpURLConnection
+        connection.connectTimeout = 4000
+        connection.readTimeout = 4000
+        try {
+            if (connection.responseCode !in 200..299) return@runCatching emptyList()
+            parseSuggestions(Roku.readLimited(connection, 64 * 1024), query)
+        } finally {
+            connection.disconnect()
+        }
+    }.getOrDefault(emptyList())
+
     fun thumbnail(id: String): ByteArray {
         val connection = URL(thumbnailUrl(id)).openConnection() as HttpURLConnection
         connection.connectTimeout = 5000

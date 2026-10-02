@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import tls from 'node:tls';
 import {
-  ANDROIDTV_EXTRA_KEYS, ANDROIDTV_KEYS, ANDROIDTV_APPS, ANDROIDTV_STATE, FEATURES, NEEDS_FOCUS, NO_APP_LINKS, NO_POWER,
+  ANDROIDTV_EXTRA_KEYS, ANDROIDTV_KEYS, ANDROIDTV_APPS, ANDROIDTV_STATE, appNotOpened, FEATURES, NEEDS_FOCUS, NO_APP_LINKS, NO_POWER,
   createAndroidTvSession, createIdentityStore, pairingSecret, storeKey,
 } from '../lib/androidtv.mjs';
 import { createFrameReader, decode, decodeVarint, encode, encodeVarint, first, frame, message, text } from '../lib/protobuf.mjs';
@@ -50,8 +50,10 @@ function codeFor(clientPem, serverPem, nonce = crypto.randomBytes(2)) {
 }
 
 // Etterligner en Android TV-boks: paringstjeneste og fjernkontroll-tjeneste over ekte TLS med klientsertifikat.
-async function fakeTv({ server = createSelfSignedCertificate({ commonName: 'atvremote' }), paired = new Set(), closeUnknown = true, rejectHandshake = false, features = 622 } = {}) {
-  const tv = { paired, received: [], remoteSockets: [], code: null, secrets: [], server };
+async function fakeTv({ server = createSelfSignedCertificate({ commonName: 'atvremote' }), paired = new Set(), closeUnknown = true, rejectHandshake = false, features = 622, reportApps = false, onAppLink = () => {} } = {}) {
+  const tv = { paired, received: [], remoteSockets: [], code: null, secrets: [], server, currentApp: 'com.google.android.tvlauncher' };
+  // Boksen melder åpen app i remote_ime_key_inject.app_info.app_package (felt 20 → 1 → 12).
+  const reportApp = (socket) => reportApps && socket.write(frame(encode([[20, encode([[1, encode([[1, 1], [12, tv.currentApp]])]])]])));
   const fingerprintOf = (socket) => socket.getPeerCertificate()?.fingerprint256;
   const options = { cert: server.cert, key: server.key, requestCert: true, rejectUnauthorized: false };
 
@@ -101,6 +103,17 @@ async function fakeTv({ server = createSelfSignedCertificate({ commonName: 'atvr
       if (fields.has(2)) {
         send(encode([[8, encode([[1, 42]])]]));
         send(encode([[40, encode([[1, 1]])]]));
+        reportApp(socket);
+      }
+      if (fields.has(90)) {
+        // onAppLink bestemmer hva boksen gjør med lenken: åpne en app ('open:<pakke>'), avvise den ('error'),
+        // eller lukke forbindelsen ('drop' / 'open-drop:<pakke>').
+        const action = onAppLink(text(message(fields, 90), 1)) || '';
+        const [kind, pkg] = action.split(':');
+        if (pkg) tv.currentApp = pkg;
+        if (kind === 'open') reportApp(socket);
+        if (kind === 'error') send(encode([[3, encode([[1, 0], [2, payload]])]]));
+        if (kind === 'drop' || kind === 'open-drop') socket.destroy();
       }
     }));
     send(encode([[1, encode([[1, features], [2, encode([[1, 'Telia Play-boks'], [2, 'Telia']])]])]]));
@@ -192,11 +205,13 @@ test('paringskoden sjekkes lokalt: riktig kode gir hemmeligheten, feil kode avvi
 test('alle ekstra taster har en Android-tast, og alle tastene er gyldige kommandoer', () => {
   for (const key of ANDROIDTV_EXTRA_KEYS) assert.ok(ANDROIDTV_KEYS[key] !== undefined, key);
   for (const key of Object.keys(ANDROIDTV_KEYS)) assert.ok(COMMANDS.includes(key), key);
-  // Appene åpnes med pakkenavn via Play-butikken (https-lenker virket ikke på Telia-boksen).
+  // Hver app har egne lenker, og market://launch?id=<pakke> sist som siste utvei.
   const ids = new Set();
   for (const app of ANDROIDTV_APPS) {
     assert.match(app.package, /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, app.id);
-    assert.equal(app.link, `market://launch?id=${app.package}`);
+    assert.ok(app.links.length >= 2, app.id);
+    assert.equal(app.links.at(-1), `market://launch?id=${app.package}`);
+    for (const link of app.links) assert.match(link, /^[a-z][a-z0-9.+-]*:\/\/[^\s]*$/, link);
     assert.equal(app.icon, `/icons/apps/${app.id}.png`);
     assert.ok(!ids.has(app.id), app.id);
     ids.add(app.id);
@@ -312,7 +327,7 @@ test('taster, ⏯, apper, YouTube og strøm sendes som Android-hendelser og appl
     await settle(50);
     assert.deepEqual(keyCodes(tv), [19, 23, 4, 3, 24, 164, 85, 12, 186, 176, 26]);
     assert.ok(tv.received.filter((f) => f.has(10)).every((f) => first(message(f, 10), 2) === 3), 'kort trykk');
-    assert.deepEqual(appLinks(tv), ['market://launch?id=com.netflix.ninja', 'https://www.youtube.com/watch?v=n61ULEU7CO0']);
+    assert.deepEqual(appLinks(tv), ['netflix://', 'https://www.youtube.com/watch?v=n61ULEU7CO0'], 'uten appmeldinger sendes bare første lenke');
     const apps = await atv.apps();
     assert.deepEqual(apps.map((a) => a.id), ANDROIDTV_APPS.map((a) => a.id));
     assert.deepEqual(apps.find((a) => a.id === 'teliaplay'), { id: 'teliaplay', name: 'Telia Play', system: false, color: null, icon: '/icons/apps/teliaplay.png' });
@@ -361,6 +376,61 @@ test('funksjonene avtales med boksen: vi svarer med det begge støtter, og uten 
   } finally {
     limited.atv.disconnect();
     limited.tv.close();
+  }
+});
+
+const NRK = ANDROIDTV_APPS.find((app) => app.id === 'nrktv');
+const fast = { launchWait: 300, reconnectWait: 4000, reconnectDelays: [50, 100, 200] };
+
+test('apper: lenkene prøves til boksen melder at appen er åpen, og den som virket brukes neste gang', async () => {
+  const lines = [];
+  // Boksen ignorerer nrktv:// og åpner appen med nettadressen.
+  const onAppLink = (link) => (link === 'https://tv.nrk.no' ? 'open:no.nrk.tv' : '');
+  const { tv, atv } = await pairedSession({ tv: { reportApps: true, onAppLink }, session: { ...fast, log: (line) => lines.push(line) } });
+  try {
+    await waitFor(() => atv.currentApp === 'com.google.android.tvlauncher');
+    assert.deepEqual(await atv.launch('nrktv'), { verified: true });
+    assert.deepEqual(appLinks(tv), ['nrktv://', 'https://tv.nrk.no']);
+    assert.ok(lines.includes('Android TV: nrktv:// åpnet ikke appen (ingen melding)'), lines.join('\n'));
+    tv.currentApp = 'com.google.android.tvlauncher';
+    tv.sendToAll(encode([[20, encode([[1, encode([[12, tv.currentApp]])]])]]));
+    await waitFor(() => atv.currentApp === 'com.google.android.tvlauncher');
+    assert.deepEqual(await atv.launch('nrktv'), { verified: true });
+    assert.deepEqual(appLinks(tv).slice(2), ['https://tv.nrk.no'], 'lenken som virket, prøves først');
+  } finally {
+    atv.disconnect();
+    tv.close();
+  }
+});
+
+test('apper: en boks som faller ut på market://, kobles til igjen, og brukeren får beskjed når ingen lenke virker', async () => {
+  const lines = [];
+  const onAppLink = (link) => (link.startsWith('market://') ? 'drop' : link === 'nrktv://' ? 'error' : '');
+  const { tv, atv } = await pairedSession({ tv: { reportApps: true, onAppLink }, session: { ...fast, log: (line) => lines.push(line) } });
+  try {
+    await waitFor(() => atv.currentApp);
+    await assert.rejects(atv.launch('nrktv'), (error) => error.message === appNotOpened('NRK TV') && error.status === 502);
+    assert.deepEqual(appLinks(tv), NRK.links);
+    assert.ok(lines.some((line) => line.startsWith('Android TV: boksen meldte feil (avviste felt 90)')), lines.join('\n'));
+    assert.ok(lines.includes('Android TV: market://launch?id=no.nrk.tv åpnet ikke appen (forbindelsen falt)'), lines.join('\n'));
+    await waitFor(() => atv.ready);
+    await atv.command('Home');
+  } finally {
+    atv.disconnect();
+    tv.close();
+  }
+});
+
+test('apper: åpner boksen appen og faller ut samtidig, regnes det som åpnet etter ny tilkobling', async () => {
+  const onAppLink = (link) => (link === 'nrktv://' ? 'open-drop:no.nrk.tv' : '');
+  const { tv, atv } = await pairedSession({ tv: { reportApps: true, onAppLink }, session: fast });
+  try {
+    await waitFor(() => atv.currentApp);
+    assert.deepEqual(await atv.launch('nrktv'), { verified: true });
+    assert.deepEqual(appLinks(tv), ['nrktv://'], 'ingen flere lenker etter at appen ble åpnet');
+  } finally {
+    atv.disconnect();
+    tv.close();
   }
 });
 

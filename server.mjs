@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { UserError, toUserMessage } from './lib/errors.mjs';
 import { validAppId, validCommand, validDevice, validInputId, validQuery, validText } from './lib/validate.mjs';
 import { ROKU_EXTRA_KEYS, rokuApps, rokuCommand, rokuIcon, rokuLaunch, rokuPlayYoutube, rokuProbe, rokuText } from './lib/roku.mjs';
-import { searchYoutube, thumbnailUrl, validVideoId } from './lib/youtube.mjs';
+import { searchYoutube, suggestYoutube, thumbnailUrl, validVideoId } from './lib/youtube.mjs';
 import { createIconCache, fetchBytes, sniffImage } from './lib/icons.mjs';
 import { createDiscovery } from './lib/ssdp.mjs';
 import { LG_EXTRA_KEYS, createKeyStore, createLgSession } from './lib/lg.mjs';
@@ -297,6 +297,8 @@ export function createBridge({
         }
         return sendJson(res, 200, { ok: true });
       }
+      case '/api/ytsuggest':
+        return sendJson(res, 200, { suggestions: await suggestYoutube(validQuery(input.query), { fetchImpl }) });
       case '/api/ytsearch':
         return sendJson(res, 200, { videos: await searchYoutube(validQuery(input.query), { fetchImpl }) });
       case '/api/ytplay': {

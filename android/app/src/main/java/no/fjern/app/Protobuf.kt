@@ -62,6 +62,7 @@ object Proto {
     /** Dekodede felt: nummer → verdier (Long for varint, ByteArray for lengdeprefiksert). */
     class Fields(private val map: Map<Int, List<Any>>) {
         fun has(number: Int) = map.containsKey(number)
+        fun numbers(): List<Int> = map.keys.toList()
         fun long(number: Int): Long? = map[number]?.firstOrNull() as? Long
         fun bytes(number: Int): ByteArray? = map[number]?.firstOrNull() as? ByteArray
         fun message(number: Int): Fields? = bytes(number)?.let { decode(it) }
