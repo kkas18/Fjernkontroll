@@ -442,3 +442,46 @@ Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og an
   - Et trykk på et forslag søker og skjuler forslagene.
   - Et tomt felt viser «Siste søk».
 - **Ikke verifisert:** mot en ekte Telia-boks. Hvis en app fortsatt ikke åpnes, viser feilsøkingsloggen hver lenke som ble prøvd, og hva boksen svarte.
+
+### Rettet i 2.10.4: TV 2 Play startet ikke, og Fjern lærer appene på boksen
+**Brukerens tilbakemelding:** TV 2 Play startet ikke, selv om appen er installert. Brukeren ba om en grundig sjekk, og om at Fjern automatisk skal få vite det den trenger når den kobler til en boks eller TV.
+
+**Funn i gjennomgangen:**
+1. **Ingen bekreftelse fra boksen.** Melder ikke boksen hvilken app som er åpen, sendte 2.10.3 bare den første lenken (`https://play.tv2.no` for TV 2 Play) og kunne ikke se at den ikke virket. Det passer med symptomet: appen startet ikke, og det kom ingen feilmelding.
+2. **Ingen generell måte å starte en app ut fra pakkenavnet.** `market://` virker ikke lenger, og egne lenker er ikke kjent for alle apper.
+3. **App som allerede var åpen.** Fjern kunne prøve flere lenker etter hverandre unødvendig, fordi boksen ikke melder på nytt.
+4. **Lenken som virket, ble ikke lagret.** Den lå bare i minnet og ble glemt når appen ble startet på nytt.
+5. **Ingen app-informasjon fra boksen.** Fjern visste ikke hvilke apper som er installert.
+
+**Utbedring:**
+- **Intent-lenke for alle apper**, foran `market://`: `intent:#Intent;action=MAIN;category=LEANBACK_LAUNCHER;package=<pakke>;…;end`. Den starter TV-appen ut fra pakkenavnet, uten Play-butikken, hvis boksens fjernkontrolltjeneste tolker intent-lenker. Bokser gjør ulikt her. En boks som ikke tolker dem, avviser lenken, og da går Fjern videre til neste.
+- **Uten bekreftelse fra boksen:**
+  - En avvist lenke eller en frakobling gir neste lenke. Fjern venter bare 1,2 s på en eventuell avvisning.
+  - Startet appen likevel ikke, viser varselet **«Prøv en annen måte»**. Den sender neste lenke og lagrer valget.
+  - Når alle lenkene er prøvd, får brukeren beskjed.
+- **App som allerede er åpen:** Bare den kjente lenken sendes.
+- **Lagring per boks:** Lenken som virket, lagres i `data/androidtv-apps.json` (Node) eller `androidtv-apps.json` i appens private lagring (Android). Den overlever omstart.
+- **Automatisk læring:** Apper boksen melder at er åpne, læres og vises i «Alle apper», med navnet boksen oppgir, eller et navn laget fra pakkenavnet.
+  - Systemapper (startskjerm, innstillinger, oppsett, assistent, Play-butikken) hoppes over.
+  - Inntil 40 apper per boks.
+  - De åpnes med intent-lenken.
+- **Feilsøkingsloggen** viser hver lenke, hvordan det gikk, og lærte apper.
+
+**Om «automatisk informasjon ved tilkobling»:**
+- **LG, Samsung og Roku:** TV-en gir applisten og ikonene ved tilkobling. Det gjorde Fjern allerede.
+- **Android TV / Google TV:** Fjernkontrollprotokollen har verken en appliste eller en «start app»-kommando. Det gjelder også Googles egen fjernkontroll-app.
+  - Fjern lærer derfor appene etter hvert som boksen melder dem, og husker hvilken lenke som virker.
+  - Å prøve alle appene automatisk ved tilkobling er ikke gjort med vilje: det ville åpnet den ene appen etter den andre på TV-en.
+
+**Verifisert:**
+- `npm run verify` består. Nye tester mot den falske boksen over TLS:
+  - boks uten meldinger om åpen app (avvisning gir neste lenke, «Prøv en annen måte», lagring, ny økt bruker lagret lenke)
+  - app som allerede er åpen
+  - lærte apper og systemapper
+- Kotlin: **38/38**, kjørt tre ganger på rad. Nye live-tester over ekte TLS for de samme tilfellene, og lagring i fil.
+- **Ende-til-ende i Chromium** med den ekte Node-broen og en falsk boks over TLS, i to varianter:
+  - **Boksen melder ikke åpen app:** tilkobling og taster (19, 23, 3). TV 2 Play: `https://` ble avvist, intent-lenken ble sendt, og varselet viste «Prøv en annen måte». Et trykk på den sendte `market://`. Boksen koblet fra, Fjern koblet til igjen og ga en tydelig feilmelding.
+  - **Boksen melder åpen app:** TV 2 Play ble bekreftet åpen via intent-lenken. En app åpnet på boksen ble lært og vist i «Alle apper».
+  - **YouTube** mot ekte nett: forslag og 17–18 treff uten Enter.
+  - Ingen JS-feil.
+- **Ikke verifisert:** mot en ekte Telia-boks. Om boksen tolker intent-lenker, vet vi først når den prøves. Feilsøkingsloggen viser hver lenke og hva boksen svarte.

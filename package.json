@@ -1,6 +1,6 @@
 {
   "name": "fjern",
-  "version": "2.10.3",
+  "version": "2.10.4",
   "description": "Fjernkontroll-PWA for Roku og LG webOS med en lokal Node-bro. Ingen npm-avhengigheter.",
   "private": true,
   "type": "module",

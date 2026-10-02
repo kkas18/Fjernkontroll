@@ -120,9 +120,24 @@ function svgIcon(name) {
 }
 
 let toastTimer;
-function toast(message) {
+// Varsel nederst. Med handling (for eksempel «Prøv en annen måte») får det en knapp og står lenger.
+function toast(message, action = null) {
   const el = $('#toast');
-  el.textContent = message;
+  const text = document.createElement('span');
+  text.textContent = message;
+  el.replaceChildren(text);
+  el.classList.toggle('has-action', Boolean(action));
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'toast-action';
+    button.textContent = action.label;
+    button.addEventListener('click', () => {
+      hideToast();
+      action.run();
+    });
+    el.append(button);
+  }
   clearTimeout(toastTimer);
   // Åpne ark ligger i nettleserens øverste lag. Meldingen legges der på nytt hver gang, så den havner over dem.
   if (el.showPopover) {
@@ -132,10 +147,13 @@ function toast(message) {
     } catch { /* popover støttes ikke: vises som før */ }
   }
   requestAnimationFrame(() => el.classList.add('show'));
-  toastTimer = setTimeout(() => {
-    el.classList.remove('show');
-    toastTimer = setTimeout(() => { try { el.hidePopover?.(); } catch { /* allerede skjult */ } }, 200);
-  }, 3200);
+  toastTimer = setTimeout(hideToast, action ? 7000 : 3200);
+}
+function hideToast() {
+  const el = $('#toast');
+  clearTimeout(toastTimer);
+  el.classList.remove('show');
+  toastTimer = setTimeout(() => { try { el.hidePopover?.(); } catch { /* allerede skjult */ } }, 200);
 }
 
 function haptic(pattern = 10) {
@@ -552,11 +570,15 @@ async function send(key, button, { requireReady = true } = {}) {
   }
 }
 
-async function launch(app, button) {
+async function launch(app, button, { retry = false } = {}) {
   haptic();
   try {
-    await api('launch', { id: app.id });
+    const result = await api('launch', retry ? { id: app.id, retry: true } : { id: app.id });
     flash(button, 'is-sent', 200);
+    // Android TV-bokser som ikke melder hvilken app som er åpen: brukeren kan be om neste måte å åpne den på.
+    if (result?.verified === false && result.canRetry) {
+      toast(`Åpnet ikke ${app.name} seg?`, { label: 'Prøv en annen måte', run: () => launch(app, button, { retry: true }) });
+    }
     if (state.nowPlaying) {
       state.nowPlaying = null;
       renderNowPlaying();

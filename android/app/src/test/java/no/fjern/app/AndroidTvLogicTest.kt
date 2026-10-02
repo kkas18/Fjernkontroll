@@ -105,12 +105,24 @@ class AndroidTvLogicTest {
             Validate.appId(app.id)
             assertEquals("market://launch?id=${app.pkg}", app.links.last())
             assertTrue(app.id, app.links.size >= 2)
-            val own = app.links.dropLast(1).joinToString(", ") { "'$it'" }
+            assertEquals(AndroidTvSession.intentLink(app.pkg), app.links[app.links.size - 2])
+            val own = app.links.dropLast(2).joinToString(", ") { "'$it'" }
             assertTrue("${app.id} er ulik i lib/androidtv.mjs", node.contains("{ id: '${app.id}', name: '${app.name}', package: '${app.pkg}', links: [$own] }"))
             val icon = repoFile("public${app.icon}")
             assertArrayEquals(png, icon.readBytes().copyOfRange(0, 4))
         }
         assertEquals(AndroidTvSession.APPS.size, Regex("package: '").findAll(node).count())
+    }
+
+    @Test fun learnedAppsSkipSystemAppsAndGetReadableNames() {
+        assertTrue(AndroidTvSession.isLearnableApp("no.tv2.sumo"))
+        assertTrue(AndroidTvSession.isLearnableApp("com.plexapp.android"))
+        listOf("com.google.android.tvlauncher", "com.google.android.apps.tv.launcherx", "com.android.tv.settings", "com.sdmc.launcher.atv", "com.android.vending", "../x", "", null)
+            .forEach { assertTrue("$it", !AndroidTvSession.isLearnableApp(it)) }
+        assertEquals("Svtplay", AndroidTvSession.learnedName("se.svt.svtplay.androidtv"))
+        assertEquals("Plexapp", AndroidTvSession.learnedName("com.plexapp.android"))
+        assertEquals("Navn", AndroidTvSession.learnedName("x.y", "  Navn\u0000 "))
+        assertTrue(AndroidTvSession.intentLink("no.tv2.sumo").startsWith("intent:#Intent;") && AndroidTvSession.intentLink("no.tv2.sumo").contains(";package=no.tv2.sumo;"))
     }
 
     @Test fun featuresAreIntersectedWithTheBox() {

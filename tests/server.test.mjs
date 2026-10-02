@@ -64,7 +64,7 @@ const fakeAndroidTv = {
   async powerOn() { calls.push(['atv-wake']); },
   async text(value) { calls.push(['atv-text', value]); },
   async apps() { return [{ id: 'netflix', name: 'Netflix', system: false, color: null }]; },
-  async launch(id) { calls.push(['atv-launch', id]); },
+  async launch(id, options) { calls.push(['atv-launch', id, options]); return { verified: false, canRetry: !options.retry }; },
   async inputs() { return []; },
   async switchInput() { throw new UserError('Android TV har ingen innganger å velge.', 404); },
   async playYoutube(id) { calls.push(['atv-yt', id]); },
@@ -289,6 +289,10 @@ test('Android TV: kode fra skjermen pares via /api/pair, deretter vanlige komman
   await post('/api/command', { key: 'PowerOn' });
   await post('/api/ytplay', { id: 'n61ULEU7CO0' });
   assert.deepEqual(calls, [['atv', 'Home'], ['atv-wake'], ['atv-yt', 'n61ULEU7CO0']]);
+  // Åpning av app: broen sender videre om den er bekreftet, og om brukeren kan prøve en annen måte.
+  assert.deepEqual((await post('/api/launch', { id: 'tv2play' })).json, { ok: true, verified: false, canRetry: true });
+  assert.deepEqual((await post('/api/launch', { id: 'tv2play', retry: true })).json, { ok: true, verified: false, canRetry: false });
+  assert.deepEqual(calls.slice(-2), [['atv-launch', 'tv2play', { retry: false }], ['atv-launch', 'tv2play', { retry: true }]]);
   assert.equal((await request('/api/icon/netflix')).status, 404);
   await post('/api/connect', { device: { type: 'roku', host: '192.168.1.5' } });
   assert.equal((await post('/api/pair', { code: 'A1B2C3' })).status, 409, 'koder er bare for Android TV');

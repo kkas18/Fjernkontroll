@@ -57,7 +57,18 @@ Eldre Samsung-modeller (før 2016), Apple TV og rene IR-TV-er støttes ikke. Son
 
 På Samsung finnes ikke appikoner over nettet, så appene vises med merkefarge og kortnavn. Innganger er kildemenyen og HDMI 1–4.
 
-På Android TV har protokollen ingen appliste. Appen viser snarveier til vanlige strømmetjenester med egne ikoner: Telia Play, NRK TV, TV 2 Play, Netflix, YouTube, Disney+, HBO Max, Prime Video, Viaplay, Spotify og Apple TV. Hver app har flere lenker: appens egen (for eksempel `nrktv://`), nettadressen og `market://launch?id=<pakke>`. Appen prøver dem i rekkefølge til boksen melder at appen er åpen, og husker hvilken som virket. Åpnes ikke appen, får du beskjed. Bokser som ikke melder hvilken app som er åpen, får bare den første lenken. «Skriv på TV» virker når skjermtastaturet er åpent på boksen, og «Slå på» bare mens appen er koblet til (boksen i hvilemodus).
+På Android TV har protokollen ingen appliste. Appen viser snarveier til vanlige strømmetjenester med egne ikoner: Telia Play, NRK TV, TV 2 Play, Netflix, YouTube, Disney+, HBO Max, Prime Video, Viaplay, Spotify og Apple TV. Protokollen (den samme som Google TV-appen bruker) har ingen «start app»-kommando, bare lenker. Hver app har derfor flere lenker, som prøves i denne rekkefølgen:
+
+1. appens egen lenke, for eksempel `nrktv://` eller nettadressen
+2. en intent-lenke som starter TV-appen ut fra pakkenavnet
+3. `market://launch?id=<pakke>`
+
+**Lenker:**
+- **Boksen melder hvilken app som er åpen:** Fjern ser selv om appen startet, og prøver neste lenke hvis den ikke gjorde det.
+- **Boksen melder det ikke:** Fjern går videre når boksen avviser en lenke eller kobler fra. Startet appen likevel ikke, trykker du «Prøv en annen måte» i varselet.
+- Lenken som virket, lagres per boks (`data/androidtv-apps.json`, eller i appens private lagring på Android). Neste gang åpnes appen med en gang.
+
+**Automatisk læring:** Åpner du en app på TV-en med boksens egen fjernkontroll, og boksen melder det, legges appen til i «Alle apper». Slik lærer Fjern hvilke apper som er installert på boksen. Startskjerm, innstillinger og andre systemapper tas ikke med. «Skriv på TV» virker når skjermtastaturet er åpent på boksen, og «Slå på» bare mens appen er koblet til (boksen i hvilemodus).
 
 ## Hvorfor en lokal bro?
 

@@ -323,7 +323,11 @@ class Bridge(
                 val id = Validate.appId(body.optString("id"))
                 if (device.type == "lg") lg.launch(id)
                 else if (device.type == "samsung") samsung.launch(id)
-                else if (device.type == "androidtv") androidtv.launch(id)
+                else if (device.type == "androidtv") {
+                    // Android TV svarer om åpningen er bekreftet, og om det finnes en annen måte å prøve (retry).
+                    val result = androidtv.launch(id, retry = body.optBoolean("retry", false))
+                    return JSONObject().put("ok", true).put("verified", result.verified).put("canRetry", result.canRetry)
+                }
                 else {
                     if (rokuApps.none { it.id == id }) throw UserError("Ukjent app.", 404)
                     withRoku { Roku.launch(device.host, id) }

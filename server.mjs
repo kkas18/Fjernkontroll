@@ -86,7 +86,12 @@ export function createBridge({
   lg = createLgSession({ keyStore, log }),
   samsung = createSamsungSession({ keyStore, log, fetchImpl }),
   // Appens eget klientsertifikat for Android TV; lages første gang det trengs.
-  androidtv = createAndroidTvSession({ keyStore, identity: createIdentityStore(path.join(dataDir, 'androidtv-client.json')), log }),
+  androidtv = createAndroidTvSession({
+    keyStore,
+    appStore: createKeyStore(path.join(dataDir, 'androidtv-apps.json')),
+    identity: createIdentityStore(path.join(dataDir, 'androidtv-client.json')),
+    log,
+  }),
   discover = createDiscovery({
     log,
     probeRoku: (host) => rokuProbe(host, { fetchImpl }),
@@ -311,6 +316,11 @@ export function createBridge({
       case '/api/launch': {
         if (!selected) throw new UserError('Velg en TV først.', 409);
         const id = validAppId(input.id);
+        // Android TV svarer om åpningen er bekreftet, og om det finnes en annen måte å prøve (retry).
+        if (selected.type === 'androidtv') {
+          const result = await androidtv.launch(id, { retry: input.retry === true });
+          return sendJson(res, 200, { ok: true, verified: Boolean(result?.verified), canRetry: Boolean(result?.canRetry) });
+        }
         if (tvSession()) await tvSession().launch(id);
         else {
           if (!rokuAppList.some((app) => app.id === id)) throw new UserError('Ukjent app.', 404);

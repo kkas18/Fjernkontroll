@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import tls from 'node:tls';
 import {
-  ANDROIDTV_EXTRA_KEYS, ANDROIDTV_KEYS, ANDROIDTV_APPS, ANDROIDTV_STATE, appNotOpened, FEATURES, NEEDS_FOCUS, NO_APP_LINKS, NO_POWER,
+  ANDROIDTV_EXTRA_KEYS, ANDROIDTV_KEYS, ANDROIDTV_APPS, ANDROIDTV_STATE, appNotOpened, FEATURES, intentLink, isLearnableApp, learnedName, memoryAppStore, NO_MORE_WAYS, NEEDS_FOCUS, NO_APP_LINKS, NO_POWER,
   createAndroidTvSession, createIdentityStore, pairingSecret, storeKey,
 } from '../lib/androidtv.mjs';
 import { createFrameReader, decode, decodeVarint, encode, encodeVarint, first, frame, message, text } from '../lib/protobuf.mjs';
@@ -211,7 +211,8 @@ test('alle ekstra taster har en Android-tast, og alle tastene er gyldige kommand
     assert.match(app.package, /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, app.id);
     assert.ok(app.links.length >= 2, app.id);
     assert.equal(app.links.at(-1), `market://launch?id=${app.package}`);
-    for (const link of app.links) assert.match(link, /^[a-z][a-z0-9.+-]*:\/\/[^\s]*$/, link);
+    for (const link of app.links) assert.match(link, /^([a-z][a-z0-9.+-]*:\/\/[^\s]*|intent:#Intent;[^\s]+;end)$/, link);
+    assert.equal(app.links.at(-2), intentLink(app.package), 'intent-lenken før market://');
     assert.equal(app.icon, `/icons/apps/${app.id}.png`);
     assert.ok(!ids.has(app.id), app.id);
     ids.add(app.id);
@@ -389,13 +390,13 @@ test('apper: lenkene prøves til boksen melder at appen er åpen, og den som vir
   const { tv, atv } = await pairedSession({ tv: { reportApps: true, onAppLink }, session: { ...fast, log: (line) => lines.push(line) } });
   try {
     await waitFor(() => atv.currentApp === 'com.google.android.tvlauncher');
-    assert.deepEqual(await atv.launch('nrktv'), { verified: true });
+    assert.deepEqual(await atv.launch('nrktv'), { verified: true, canRetry: false });
     assert.deepEqual(appLinks(tv), ['nrktv://', 'https://tv.nrk.no']);
     assert.ok(lines.includes('Android TV: nrktv:// åpnet ikke appen (ingen melding)'), lines.join('\n'));
     tv.currentApp = 'com.google.android.tvlauncher';
     tv.sendToAll(encode([[20, encode([[1, encode([[12, tv.currentApp]])]])]]));
     await waitFor(() => atv.currentApp === 'com.google.android.tvlauncher');
-    assert.deepEqual(await atv.launch('nrktv'), { verified: true });
+    assert.deepEqual(await atv.launch('nrktv'), { verified: true, canRetry: false });
     assert.deepEqual(appLinks(tv).slice(2), ['https://tv.nrk.no'], 'lenken som virket, prøves først');
   } finally {
     atv.disconnect();
@@ -426,12 +427,98 @@ test('apper: åpner boksen appen og faller ut samtidig, regnes det som åpnet et
   const { tv, atv } = await pairedSession({ tv: { reportApps: true, onAppLink }, session: fast });
   try {
     await waitFor(() => atv.currentApp);
-    assert.deepEqual(await atv.launch('nrktv'), { verified: true });
+    assert.deepEqual(await atv.launch('nrktv'), { verified: true, canRetry: false });
     assert.deepEqual(appLinks(tv), ['nrktv://'], 'ingen flere lenker etter at appen ble åpnet');
   } finally {
     atv.disconnect();
     tv.close();
   }
+});
+
+test('apper: uten meldinger om åpen app prøves neste lenke ved avvisning, «Prøv en annen måte» går videre, og valget huskes', async () => {
+  const appStore = memoryAppStore();
+  const TV2 = ANDROIDTV_APPS.find((app) => app.id === 'tv2play');
+  // Boksen avviser nettadressen, godtar intent-lenken uten å si fra, og faller ut på market://.
+  const onAppLink = (link) => (link.startsWith('https://') ? 'error' : link.startsWith('market://') ? 'drop' : '');
+  const { tv, atv, keyStore } = await pairedSession({ tv: { onAppLink }, session: { ...fast, appStore } });
+  try {
+    assert.deepEqual(await atv.launch('tv2play'), { verified: false, canRetry: true });
+    assert.deepEqual(appLinks(tv), ['https://play.tv2.no', intentLink('no.tv2.sumo')], 'avvist lenke gir neste');
+    assert.equal((await appStore.get(storeKey('127.0.0.1'))).links.tv2play, intentLink('no.tv2.sumo'));
+    // Neste trykk går rett på lenken som ble brukt sist.
+    await atv.launch('tv2play');
+    assert.deepEqual(appLinks(tv).slice(2), [intentLink('no.tv2.sumo')]);
+    // «Prøv en annen måte»: market:// får boksen til å falle ut, og da er det ikke flere måter igjen.
+    await assert.rejects(atv.launch('tv2play', { retry: true }), (error) => error.message === appNotOpened('TV 2 Play'));
+    assert.equal(appLinks(tv).at(-1), TV2.links.at(-1));
+    assert.equal((await appStore.get(storeKey('127.0.0.1'))).links.tv2play, undefined, 'ingen lenke virket');
+    await waitFor(() => atv.ready);
+    await atv.launch('tv2play');
+    await assert.rejects(atv.launch('tv2play', { retry: true }), /Boksen åpnet ikke|alle måtene/);
+    // Valget lagres per boks og brukes av en ny økt.
+    await appStore.update(storeKey('127.0.0.1'), { links: { nrktv: 'https://tv.nrk.no' } });
+    atv.disconnect();
+    const again = session(tv, { keyStore, appStore, ...fast });
+    await again.connect('127.0.0.1');
+    await waitFor(() => again.ready);
+    tv.received.length = 0;
+    await again.launch('nrktv');
+    assert.equal(appLinks(tv)[0], 'https://tv.nrk.no');
+    again.disconnect();
+  } finally {
+    atv.disconnect();
+    tv.close();
+  }
+});
+
+test('apper: er appen allerede åpen, sendes bare én lenke', async () => {
+  const { tv, atv } = await pairedSession({ tv: { reportApps: true, onAppLink: () => '' }, session: fast });
+  try {
+    tv.currentApp = 'no.nrk.tv';
+    tv.sendToAll(encode([[20, encode([[1, encode([[12, 'no.nrk.tv']])]])]]));
+    await waitFor(() => atv.currentApp === 'no.nrk.tv');
+    assert.deepEqual(await atv.launch('nrktv'), { verified: true, canRetry: false });
+    await settle(50);
+    assert.deepEqual(appLinks(tv), ['nrktv://']);
+  } finally {
+    atv.disconnect();
+    tv.close();
+  }
+});
+
+test('apper boksen melder åpne, læres og kan åpnes med intent-lenken; systemapper læres ikke', async () => {
+  const appStore = memoryAppStore();
+  const lines = [];
+  // Boksen starter appen fra intent-lenken (pakkenavnet står i lenken).
+  const onAppLink = (link) => (link.startsWith('intent:') ? `open:${link.match(/;package=([\w.]+);/)[1]}` : '');
+  const { tv, atv } = await pairedSession({ tv: { reportApps: true, onAppLink }, session: { ...fast, appStore, log: (line) => lines.push(line) } });
+  try {
+    for (const [pkg, label] of [['com.google.android.tvlauncher', ''], ['no.example.kino', 'Kino Pluss'], ['com.android.tv.settings', ''], ['no.nrk.tv', 'NRK TV'], ['com.plexapp.android', '']]) {
+      tv.sendToAll(encode([[20, encode([[1, encode([[10, label], [12, pkg]])]])]]));
+      await waitFor(() => atv.currentApp === pkg);
+    }
+    await settle(50);
+    const apps = await atv.apps();
+    const learned = apps.slice(ANDROIDTV_APPS.length);
+    assert.deepEqual(learned, [
+      { id: 'no.example.kino', name: 'Kino Pluss', system: false, color: null },
+      { id: 'com.plexapp.android', name: 'Plexapp', system: false, color: null },
+    ]);
+    assert.ok(lines.includes('Android TV: lærte appen Kino Pluss (no.example.kino)'), lines.join('\n'));
+    tv.received.length = 0;
+    assert.deepEqual(await atv.launch('no.example.kino'), { verified: true, canRetry: false });
+    assert.deepEqual(appLinks(tv), [intentLink('no.example.kino')]);
+    await assert.rejects(atv.launch('com.android.tv.settings'), /Ukjent app/);
+  } finally {
+    atv.disconnect();
+    tv.close();
+  }
+  assert.equal(isLearnableApp('com.google.android.apps.tv.launcherx'), false);
+  assert.equal(isLearnableApp('com.sdmc.launcher.atv'), false);
+  assert.equal(isLearnableApp('no.tv2.sumo'), true);
+  assert.equal(isLearnableApp('../x'), false);
+  assert.equal(learnedName('se.svt.svtplay.androidtv'), 'Svtplay');
+  assert.equal(learnedName('x.y', '  Navn\u0000 '), 'Navn');
 });
 
 test('tekst krever åpent tekstfelt, og sender tellerne fra boksen tilbake', async () => {

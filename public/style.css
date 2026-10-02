@@ -527,6 +527,19 @@ form .button { width: 100%; margin-top: var(--s-5); }
   z-index: 10;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.has-action:where(:popover-open, .show) { display: flex; align-items: center; gap: var(--s-3); padding-right: var(--s-2); }
+.toast.has-action.show { pointer-events: auto; }
+.toast-action {
+  flex: none;
+  min-height: 40px;
+  padding: 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--t-s);
+  font-weight: 700;
+}
 .hint.error { color: var(--err); font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) {
