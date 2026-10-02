@@ -27,11 +27,13 @@ object Validate {
         return a == 10 || (a == 172 && b in 16..31) || (a == 192 && b == 168)
     }
 
+    private val DEFAULT_NAMES = mapOf("roku" to "Roku", "lg" to "LG webOS", "samsung" to "Samsung-TV")
+
     fun device(type: String?, host: String?, name: String?): Device {
-        if ((type != "roku" && type != "lg") || host == null || !isPrivateIPv4(host)) {
+        val fallback = type?.let { DEFAULT_NAMES[it] }
+        if (type == null || fallback == null || host == null || !isPrivateIPv4(host)) {
             throw UserError("Oppgi en gyldig lokal IP-adresse og TV-type.")
         }
-        val fallback = if (type == "lg") "LG webOS" else "Roku"
         val clean = name?.trim()?.take(70).orEmpty().ifEmpty { fallback }
         return Device(type, host, clean)
     }

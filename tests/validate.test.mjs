@@ -13,7 +13,8 @@ test('isPrivateIPv4 godtar bare RFC 1918-adresser', () => {
 test('validDevice normaliserer og avviser ugyldige enheter', () => {
   assert.deepEqual(validDevice({ type: 'lg', host: '192.168.1.2' }), { type: 'lg', host: '192.168.1.2', name: 'LG webOS' });
   assert.equal(validDevice({ type: 'roku', host: '10.0.0.5', name: 'x'.repeat(200) }).name.length, 70);
-  assert.throws(() => validDevice({ type: 'samsung', host: '192.168.1.2' }), UserError);
+  assert.deepEqual(validDevice({ type: 'samsung', host: '192.168.1.3' }), { type: 'samsung', host: '192.168.1.3', name: 'Samsung-TV' });
+  assert.throws(() => validDevice({ type: 'sony', host: '192.168.1.2' }), UserError);
   assert.throws(() => validDevice({ type: 'roku', host: '8.8.8.8' }), UserError);
   assert.throws(() => validDevice(null), UserError);
 });

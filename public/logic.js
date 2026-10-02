@@ -1,10 +1,15 @@
 // Ren logikk uten DOM, delt mellom grensesnittet og testene (node:test).
 
-export const typeLabel = (type) => (type === 'lg' ? 'LG webOS' : 'Roku');
+export const DEVICE_TYPES = Object.freeze(['roku', 'lg', 'samsung']);
+const TYPE_LABELS = Object.freeze({ roku: 'Roku', lg: 'LG webOS', samsung: 'Samsung' });
+// Standardnavn for en TV som legges til uten navn (brukeren kan gi den eget navn senere).
+export const DEFAULT_NAMES = Object.freeze({ roku: 'Roku', lg: 'LG-TV', samsung: 'Samsung-TV' });
+
+export const typeLabel = (type) => TYPE_LABELS[type] || 'Roku';
 
 export const sameDevice = (a, b) => Boolean(a && b && a.type === b.type && a.host === b.host);
 
-export const isValidDevice = (d) => Boolean(d && ['roku', 'lg'].includes(d.type) && typeof d.host === 'string' && isPrivateIPv4(d.host));
+export const isValidDevice = (d) => Boolean(d && DEVICE_TYPES.includes(d.type) && typeof d.host === 'string' && isPrivateIPv4(d.host));
 
 export function isPrivateIPv4(ip) {
   if (typeof ip !== 'string' || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return false;
@@ -124,7 +129,7 @@ export function normalizeName(device) {
   const name = String(device.name || '');
   if (/^LG webOS( · .*)?$/.test(name)) return 'LG-TV';
   if (/^Roku · /.test(name)) return 'Roku';
-  return name || (device.type === 'lg' ? 'LG-TV' : 'Roku');
+  return name || DEFAULT_NAMES[device.type] || 'Roku';
 }
 
 export const displayName = (device, saved = []) =>

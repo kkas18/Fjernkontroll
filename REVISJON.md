@@ -269,3 +269,46 @@ Knapper TV-en ikke har, skjules automatisk ut fra `capabilities.keys`, som broen
 | 390×844 | 360×640 med 115 % tekst |
 | --- | --- |
 | ![](docs/revisjon/runde9/01-fast-390.png) | ![](docs/revisjon/runde9/02-fast-360-tekst115.png) |
+
+---
+
+## Runde 10 (v2.9.0): Samsung-TV-er
+
+**Brukerens tilbakemelding:** Appen fungerer ikke på Samsung-TV-er.
+
+**Årsak:** Appen støttet bare Roku og LG webOS. Samsung ble avvist både i nettverkssøket og under «Legg til med IP».
+
+### Løsning
+Samsung Tizen (2016 og nyere) styres med fjernkontroll-API-et over WebSocket. Det er det samme API-et som Samsungs egen SmartThings-app og samsungtvws/Home Assistant bruker. Støtten er bygget likt i Node-broen (`lib/samsung.mjs`) og Android-appen (`Samsung.kt`).
+
+| Funksjon | Hvordan |
+| --- | --- |
+| Tilkobling | Info fra `http://TV:8001/api/v2/`. TV-er som krever token (de fleste fra 2018) bruker `wss://…:8002` med token, eldre bruker `ws://…:8001` |
+| Første gang | TV-en viser «Tillat/Avvis», og appen viser «Trykk «Tillat» på TV-skjermen.». Tokenet og sertifikatavtrykket lagres (trust on first use), og en låst TV nedgraderes aldri til `ws://` |
+| Taster | Alle taster på forsiden, under «123» og under «Mer», unntatt «Siste apper», som Samsung ikke har. ⏯ veksler mellom pause og spill |
+| Apper | `ed.installedApp.get` / `ed.apps.launch` (dyplenke eller vanlig start etter apptype). Appikonene vises med merkefarge og kortnavn |
+| Kilde | Kildemenyen på TV-en og HDMI 1–4 |
+| Tekst | `SendInputString` (base64) i feltet som er åpent på TV-en |
+| YouTube | DIAL (`POST :8080/ws/apps/YouTube`), med dyplenke til YouTube-appen som reserve |
+| Slå på | Wake-on-LAN med MAC-adressen fra TV-ens info. Krever «Slå på med mobil» |
+| Søk | SSDP `urn:samsung.com:device:RemoteControlReceiver:1`, bekreftet mot REST-API-et og med TV-ens eget navn. Andre Samsung-enheter (mobiler, lydplanker) ignoreres |
+| Par på nytt | Fungerer nå for både LG og Samsung |
+
+### Feil funnet underveis og rettet
+1. **WebSocket-klienten (Node) kunne miste den første meldingen.** Samsung sender `ms.channel.connect` med en gang, ofte i samme TCP-pakke som håndtrykket. Klienten leverte den før lytterne var på plass. Den venter nå én hendelsessyklus. Regresjonstesten feiler uten rettingen.
+2. **Android: automatisk gjenoppkobling hang for LG** (eksisterende feil). Når forbindelsen falt ut, avbrøt gjenoppkoblingsjobben seg selv, fordi `resetLocked()` avbrøt `reconnectJob`. Appen ble stående på «Forbindelsen falt ut. Kobler til igjen …», også etter «Slå på». Rettet i `Lg.kt` og bygget riktig i `Samsung.kt`. En test mot en falsk LG-TV viste over 10 sekunder uten resultat før rettingen og 1,1 sekunder etter.
+
+### Verifisering
+- `npm run verify`: **105/105**. Nye tester:
+  - 22 for Samsung-økten (falsk TV)
+  - ekte WebSocket der TV-en svarer i samme pakke som håndtrykket
+  - Samsung gjennom broen
+  - grensesnittlogikken
+- Kotlin: kompilert og kjørt på JVM (Android-API-er utenfor). **23/23**:
+  - 15 eksisterende tester
+  - 6 for Samsung-logikk
+  - 2 med ekte OkHttp-WebSocket mot falske TV-er:
+    - Samsung: «Tillat», token, taster, tekst, apper, YouTube via DIAL og gjenoppkobling
+    - LG: gjenoppkobling
+- Chromium: Samsung som valg under «Legg til med IP», og «Mer» uten «Siste apper».
+- **Ikke verifisert:** mot en ekte Samsung-TV. Protokollen følger samsungtvws, som er i bred bruk. Hvis noe ikke virker på din modell, send feilsøkingsloggen (*TV-er → Slik kobler du til → Vis feilsøkingslogg*).

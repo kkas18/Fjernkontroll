@@ -1,6 +1,6 @@
 # Fjern
 
-Fjernkontroll for **Roku** og **LG webOS** som kjører på din egen Android-telefon. Appen er en installerbar PWA, og en liten lokal bro i Node sender kommandoene til TV-en over Wi‑Fi. Ingen konto, sky eller npm-pakker.
+Fjernkontroll for **Roku**, **LG webOS** og **Samsung** (Tizen) som kjører på din egen Android-telefon. Appen er en installerbar PWA, og en liten lokal bro i Node sender kommandoene til TV-en over Wi‑Fi. Ingen konto, sky eller npm-pakker.
 
 ## Installer på Android (APK, anbefalt)
 
@@ -50,8 +50,11 @@ Oppdater med `cd ~/fjern && git pull`.
 | Node | 20 eller nyere |
 | Roku | *Settings → System → Advanced system settings → Control by mobile apps* må være på |
 | LG webOS | Godkjenn paringen på TV-en første gang. Strøm på via nettverket støttes ikke |
+| Samsung | Tizen, modeller fra 2016 og nyere. Trykk **Tillat** når TV-en spør første gang. Har du trykket **Avvis**: *Innstillinger → Generelt → Ekstern enhetsbehandling → Enhetstilkoblingsbehandling*. «Slå på» krever *Slå på med mobil* (*Innstillinger → Generelt → Nettverk → Ekspertinnstillinger*) |
 
-Samsung, Google TV, Sony og rene IR-TV-er støttes ikke.
+Google TV, Sony, eldre Samsung-modeller (før 2016) og rene IR-TV-er støttes ikke.
+
+På Samsung finnes ikke appikoner over nettet, så appene vises med merkefarge og kortnavn. Innganger er kildemenyen og HDMI 1–4.
 
 ## Hvorfor en lokal bro?
 
@@ -66,8 +69,9 @@ Grensesnittet bruker [Manrope](https://github.com/sharanda/manrope), som ligger 
 - Broen lytter bare på `127.0.0.1` og godtar bare forespørsler med egen `Host` og `Origin`. Det stopper DNS-rebinding og forespørsler fra andre nettsider.
 - Den snakker bare med private IPv4-adresser (10/8, 172.16/12, 192.168/16), og bare med kommandoer fra en fast liste.
 - Streng `Content-Security-Policy` og andre sikkerhetshoder på alle svar.
-- LG-paringsnøkler lagres i `data/lg-keys.json` med tilgang bare for eieren (0600). Mappen er utelatt fra git.
+- LG-paringsnøkler og Samsung-tokens lagres i `data/lg-keys.json` med tilgang bare for eieren (0600). Mappen er utelatt fra git.
 - LG webOS med nyere firmware bruker `wss://` på port 3001 med et selvsignert sertifikat. Sertifikatets avtrykk **låses ved første paring** (trust on first use). Endres det senere, stopper broen tilkoblingen og ber deg pare på nytt, og en låst TV nedgraderes aldri til ukryptert `ws://`. Eldre modeller uten `wss://` bruker `ws://` på port 3000.
+- Samsung bruker samme prinsipp: `wss://` på port 8002 med token og låst sertifikat for TV-er som krever token (de fleste fra 2018), ellers `ws://` på port 8001. Tokenet sendes aldri over ukryptert forbindelse.
 - Svar fra lokalnettet har tak: maks 32 enheter per søk og 64 KB per svar fra en Roku.
 - Andre apper på samme telefon kan nå `127.0.0.1:8765`. Det kan ikke løses uten innlogging, og er en akseptert risiko for en app som bare styrer TV-en.
 
@@ -82,7 +86,7 @@ npm run verify   # syntakssjekk + tester (kjøres også i CI)
 | Mappe | Innhold |
 | --- | --- |
 | `server.mjs` | HTTP-broen: statiske filer, API og sikkerhetshoder |
-| `lib/` | Roku (ECP), LG (SSAP), SSDP-søk, WebSocket-klient, validering og feilmeldinger |
+| `lib/` | Roku (ECP), LG (SSAP), Samsung (Tizen-fjernkontroll), SSDP-søk, WebSocket-klient, validering og feilmeldinger |
 | `public/` | Grensesnittet: HTML, CSS, JS, service worker, manifest og ikoner. Brukes av både PWA og APK |
 | `android/` | Android-appen: WebView med grensesnittet og broen skrevet i Kotlin (`app/src/main/java/no/fjern/app/`) |
 | `tests/` | Enhets- og integrasjonstester |

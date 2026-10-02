@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Fjern">
-  <meta name="description" content="Fjernkontroll for Roku og LG webOS på lokalnettet.">
+  <meta name="description" content="Fjernkontroll for Roku, LG webOS og Samsung på lokalnettet.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
@@ -171,8 +171,9 @@
         <li class="web-only">Broen må kjøre i Termux: <code>npm start</code>. Appen åpnes på <code>localhost:8765</code>.</li>
         <li>Roku: slå på <i>Settings → System → Advanced system settings → Control by mobile apps</i>.</li>
         <li>LG webOS: godkjenn forespørselen som vises på TV-en første gang.</li>
+        <li>Samsung: trykk <i>Tillat</i> når TV-en spør første gang. Har du trykket <i>Avvis</i>, tillat Fjern under <i>Innstillinger → Generelt → Ekstern enhetsbehandling → Enhetstilkoblingsbehandling</i>.</li>
       </ol>
-      <p>Støtter Roku og LG webOS. Samsung, Google TV og rene IR-TV-er støttes ikke. Alt skjer lokalt, uten konto eller sky.</p>
+      <p>Støtter Roku, LG webOS og Samsung (Tizen, 2016 og nyere). Google TV, eldre Samsung-modeller og rene IR-TV-er støttes ikke. Alt skjer lokalt, uten konto eller sky.</p>
       <p>LG: «LG Connect Apps» eller «Mobil TV på» må være slått på i TV-ens innstillinger (navnet varierer per modell).</p>
       <button id="diagOpen" class="button" type="button">Vis feilsøkingslogg</button>
     </details>
@@ -188,6 +189,7 @@
         <legend>Type</legend>
         <label><input type="radio" name="deviceType" value="roku" checked><span>Roku</span></label>
         <label><input type="radio" name="deviceType" value="lg"><span>LG webOS</span></label>
+        <label><input type="radio" name="deviceType" value="samsung"><span>Samsung</span></label>
       </fieldset>
       <label class="field-label" for="ip">IP-adresse</label>
       <input id="ip" class="field mono" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.42" aria-describedby="ipHint" required>

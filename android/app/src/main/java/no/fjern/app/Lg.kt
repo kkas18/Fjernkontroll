@@ -242,7 +242,11 @@ class LgSession(
         reconnectJob?.cancel()
         reconnectJob = scope.launch(state) {
             delay(delays[attempt])
-            if (current(gen)) connectLocked(target, Auto(attempt, delays, message))
+            if (!current(gen)) return@launch
+            // connectLocked() avbryter reconnectJob; nullstill først, ellers avbryter jobben seg selv
+            // og forbindelsen blir stående på «Kobler til igjen …».
+            reconnectJob = null
+            connectLocked(target, Auto(attempt, delays, message))
         }
     }
 

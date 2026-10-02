@@ -25,7 +25,7 @@ function readClientFrame(buffer) {
 }
 
 // En liten testserver som oppfører seg som en WebSocket-server.
-function startServer({ accept = true, onFrame } = {}) {
+function startServer({ accept = true, onFrame, greeting } = {}) {
   const sockets = new Set();
   const server = net.createServer((socket) => {
     sockets.add(socket);
@@ -40,7 +40,9 @@ function startServer({ accept = true, onFrame } = {}) {
         const key = /sec-websocket-key:\s*(.+)/i.exec(buffer.subarray(0, end).toString())[1].trim();
         buffer = buffer.subarray(end + 4);
         const digest = accept ? crypto.createHash('sha1').update(key + GUID).digest('base64') : 'feil';
-        socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${digest}\r\n\r\n`);
+        const head = Buffer.from(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${digest}\r\n\r\n`);
+        // greeting: en melding i samme TCP-pakke som håndtrykket (slik Samsung-TV-er gjør).
+        socket.write(greeting ? Buffer.concat([head, frame(0x1, greeting)]) : head);
         upgraded = true;
       }
       while (buffer.length >= 6) {
@@ -107,6 +109,22 @@ test('setter sammen fragmenterte meldinger og svarer på ping', async () => {
     assert.deepEqual(pongs, ['p1']);
   } finally {
     client.close();
+    server.close();
+  }
+});
+
+test('en melding i samme pakke som håndtrykket går ikke tapt', async () => {
+  const server = await startServer({ greeting: '{"event":"ms.channel.connect"}' });
+  try {
+    const client = await openWebSocket(`ws://127.0.0.1:${server.address().port}/`);
+    // Lytteren legges til etter await, slik bruken i broen er.
+    const message = await new Promise((resolve, reject) => {
+      client.once('message', resolve);
+      setTimeout(() => reject(new Error('meldingen kom aldri')), 500);
+    });
+    assert.equal(message, '{"event":"ms.channel.connect"}');
+    client.close();
+  } finally {
     server.close();
   }
 });
