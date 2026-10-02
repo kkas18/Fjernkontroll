@@ -77,4 +77,6 @@ data class App(
     val color: String? = null,
     /** Intern adresse til ikonet på TV-en; sendes aldri til grensesnittet. */
     val icon: String? = null,
+    /** Ikon som følger med appen (public/icons/apps/…); sendes til grensesnittet som «icon». */
+    val bundledIcon: String? = null,
 )

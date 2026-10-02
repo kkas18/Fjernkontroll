@@ -84,22 +84,39 @@ class AndroidTvSession(
             "Red", "Green", "Yellow", "Blue", "Info", "Guide", "Settings", "Subtitles", "Teletext", "Recent", "Search", "Enter",
         )
 
-        /** Protokollen har ingen appliste. Disse åpnes med applenker; er appen ikke installert, skjer ingenting. */
-        val APP_LINKS = listOf(
-            Triple("youtube", "YouTube", "https://www.youtube.com"),
-            Triple("netflix", "Netflix", "https://www.netflix.com/title"),
-            Triple("nrktv", "NRK TV", "https://tv.nrk.no"),
-            Triple("tv2play", "TV 2 Play", "https://play.tv2.no"),
-            Triple("disneyplus", "Disney+", "https://www.disneyplus.com"),
-            Triple("max", "Max", "https://play.max.com"),
-            Triple("primevideo", "Prime Video", "https://app.primevideo.com"),
-            Triple("viaplay", "Viaplay", "https://viaplay.no"),
+        /**
+         * Protokollen har ingen appliste. Appene åpnes med pakkenavnet via market://launch?id=…, som Play-butikken
+         * på boksen sender videre til appen (samme som androidtvremote2/Home Assistant). Nettadresser virker ikke
+         * på alle bokser: uten nettleser tar ingen imot dem. Ikonene ligger i public/icons/apps/. Samme liste som
+         * lib/androidtv.mjs.
+         */
+        data class AppEntry(val id: String, val name: String, val pkg: String) {
+            val link get() = "market://launch?id=$pkg"
+            val icon get() = "/icons/apps/$id.png"
+        }
+        val APPS = listOf(
+            AppEntry("teliaplay", "Telia Play", "no.get.play.tv"),
+            AppEntry("nrktv", "NRK TV", "no.nrk.tv"),
+            AppEntry("tv2play", "TV 2 Play", "no.tv2.sumo"),
+            AppEntry("netflix", "Netflix", "com.netflix.ninja"),
+            AppEntry("youtube", "YouTube", "com.google.android.youtube.tv"),
+            AppEntry("disneyplus", "Disney+", "com.disney.disneyplus"),
+            AppEntry("max", "HBO Max", "com.wbd.stream"),
+            AppEntry("primevideo", "Prime Video", "com.amazon.amazonvideo.livingroom"),
+            AppEntry("viaplay", "Viaplay", "com.viaplay.android"),
+            AppEntry("spotify", "Spotify", "com.spotify.tv.android"),
+            AppEntry("appletv", "Apple TV", "com.apple.atve.androidtv.appletv"),
         )
+        const val NO_APP_LINKS = "Boksen tillater ikke at fjernkontroller åpner apper. Bruk Hjem-knappen og velg appen på TV-en."
 
         fun storeKey(host: String) = "androidtv:$host"
 
         private const val STATUS_OK = 200L
-        private const val FEATURES = 622 // samme funksjonsmaske som androidtvremote2
+        /** Funksjoner vi ber om (RemoteConfigure.code1): ping, taster, skjermtastatur, strøm, volum, applenker. */
+        const val FEATURE_APP_LINK = 512
+        const val FEATURES = 1 or 2 or 4 or 32 or 64 or FEATURE_APP_LINK // 615
+        /** Vi bruker bare det både vi og boksen støtter. Oppgir ikke boksen noe, ber vi om alt. */
+        fun activeFeatures(supported: Long) = if (supported == 0L) FEATURES else FEATURES and supported.toInt()
         private fun encoding() = Proto.encode(1 to 3, 2 to 6) // heksadesimal, seks tegn
         private fun outer(field: Int, payload: ByteArray) = Proto.encode(1 to 2, 2 to 200, field to payload)
 
@@ -108,10 +125,10 @@ class AndroidTvSession(
         fun pairingConfiguration() = outer(30, Proto.encode(1 to encoding(), 2 to 1))
         fun pairingSecretMessage(secret: ByteArray) = outer(40, Proto.encode(1 to secret))
 
-        fun remoteConfigure() = Proto.encode(1 to Proto.encode(1 to FEATURES, 2 to Proto.encode(
+        fun remoteConfigure(features: Int = FEATURES) = Proto.encode(1 to Proto.encode(1 to features, 2 to Proto.encode(
             1 to "Fjern", 2 to "Fjern", 3 to 1, 4 to "1", 5 to "atvremote", 6 to "1.0.0",
         )))
-        fun remoteSetActive() = Proto.encode(2 to Proto.encode(1 to FEATURES))
+        fun remoteSetActive(features: Int = FEATURES) = Proto.encode(2 to Proto.encode(1 to features))
         fun remotePingResponse(value: Long) = Proto.encode(9 to Proto.encode(1 to value))
         /** direction 3 = SHORT (trykk og slipp) */
         fun remoteKey(code: Int) = Proto.encode(10 to Proto.encode(1 to code, 2 to 3))
@@ -189,6 +206,8 @@ class AndroidTvSession(
     @Volatile var status: String = IDLE; private set
     @Volatile var code: String? = null; private set
     @Volatile var model: String? = null; private set
+    /** Pakkenavnet til appen som er åpen på boksen, når den melder det. */
+    @Volatile var currentApp: String? = null; private set
     val canWake get() = ready
 
     private var generation = 0
@@ -197,6 +216,7 @@ class AndroidTvSession(
     private var serverKey: PublicKey? = null
     private var on: Boolean? = null
     private var ime: Pair<Long, Long>? = null
+    private var features = FEATURES
     private var readyJob: Job? = null
     private var pairingJob: Job? = null
     private var reconnectJob: Job? = null
@@ -289,7 +309,7 @@ class AndroidTvSession(
         remote?.close()
         pairing?.close()
         host = null; remote = null; pairing = null; serverKey = null; ready = false; status = IDLE; code = null
-        model = null; on = null; ime = null
+        model = null; on = null; ime = null; features = FEATURES; currentApp = null
     }
 
     suspend fun disconnect() = withContext(state) { resetLocked() }
@@ -331,10 +351,14 @@ class AndroidTvSession(
             val info = fields.message(1)?.message(2)
             val name = listOf(info?.text(2).orEmpty(), info?.text(1).orEmpty()).filter { it.isNotEmpty() }.joinToString(" ").trim().take(40)
             if (name.isNotEmpty()) model = name
-            conn.write(remoteConfigure())
+            val supported = fields.message(1)?.long(1) ?: 0L
+            features = activeFeatures(supported)
+            log("Android TV: boksen støtter funksjoner ${if (supported == 0L) "ukjent" else supported}, bruker $features")
+            if ((features and FEATURE_APP_LINK) == 0) log("Android TV: boksen støtter ikke applenker")
+            conn.write(remoteConfigure(features))
         }
         if (fields.has(2)) {
-            conn.write(remoteSetActive())
+            conn.write(remoteSetActive(features))
             if (!ready) {
                 readyJob?.cancel()
                 ready = true
@@ -351,6 +375,14 @@ class AndroidTvSession(
         if (fields.has(3)) log("Android TV: boksen meldte feil")
         if (fields.has(8)) conn.write(remotePingResponse(fields.message(8)?.long(1) ?: 0))
         if (fields.has(40)) on = (fields.message(40)?.long(1) ?: 0L) != 0L
+        if (fields.has(20)) {
+            // Boksen forteller hvilken app som er åpen (pakkenavn). Logges for feilsøking.
+            val app = fields.message(20)?.message(1)?.text(12)
+            if (!app.isNullOrEmpty() && app != currentApp) {
+                currentApp = app
+                log("Android TV: åpen app ${app.take(80)}")
+            }
+        }
         if (fields.has(21)) {
             // Skjermtastaturet er åpent; tellerne må sendes tilbake når vi skriver tekst.
             val edit = fields.message(21)
@@ -560,17 +592,24 @@ class AndroidTvSession(
 
     suspend fun apps(): List<App> = withContext(state) {
         if (!ready) throw UserError(status, 409)
-        APP_LINKS.map { (id, name, _) -> App(id, name) }
+        APPS.map { App(it.id, it.name, bundledIcon = it.icon) }
+    }
+
+    private fun ensureAppLinks() {
+        if ((features and FEATURE_APP_LINK) == 0) throw UserError(NO_APP_LINKS, 409)
     }
 
     suspend fun launch(id: String) = withContext(state) {
         if (!ready) throw UserError(status, 409)
-        val link = APP_LINKS.firstOrNull { it.first == id }?.third ?: throw UserError("Ukjent app.", 404)
-        send(remoteAppLink(link))
+        val app = APPS.firstOrNull { it.id == id } ?: throw UserError("Ukjent app.", 404)
+        ensureAppLinks()
+        log("Android TV: åpner ${app.pkg}")
+        send(remoteAppLink(app.link))
     }
 
     suspend fun playYoutube(videoId: String) = withContext(state) {
         if (!ready) throw UserError(status, 409)
+        ensureAppLinks()
         log("Android TV: spiller YouTube-video $videoId")
         send(remoteAppLink("https://www.youtube.com/watch?v=$videoId"))
     }

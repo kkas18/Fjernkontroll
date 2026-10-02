@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import tls from 'node:tls';
 import {
-  ANDROIDTV_EXTRA_KEYS, ANDROIDTV_KEYS, ANDROIDTV_STATE, APP_LINKS, NEEDS_FOCUS, NO_POWER,
+  ANDROIDTV_EXTRA_KEYS, ANDROIDTV_KEYS, ANDROIDTV_APPS, ANDROIDTV_STATE, FEATURES, NEEDS_FOCUS, NO_APP_LINKS, NO_POWER,
   createAndroidTvSession, createIdentityStore, pairingSecret, storeKey,
 } from '../lib/androidtv.mjs';
 import { createFrameReader, decode, decodeVarint, encode, encodeVarint, first, frame, message, text } from '../lib/protobuf.mjs';
@@ -50,7 +50,7 @@ function codeFor(clientPem, serverPem, nonce = crypto.randomBytes(2)) {
 }
 
 // Etterligner en Android TV-boks: paringstjeneste og fjernkontroll-tjeneste over ekte TLS med klientsertifikat.
-async function fakeTv({ server = createSelfSignedCertificate({ commonName: 'atvremote' }), paired = new Set(), closeUnknown = true, rejectHandshake = false } = {}) {
+async function fakeTv({ server = createSelfSignedCertificate({ commonName: 'atvremote' }), paired = new Set(), closeUnknown = true, rejectHandshake = false, features = 622 } = {}) {
   const tv = { paired, received: [], remoteSockets: [], code: null, secrets: [], server };
   const fingerprintOf = (socket) => socket.getPeerCertificate()?.fingerprint256;
   const options = { cert: server.cert, key: server.key, requestCert: true, rejectUnauthorized: false };
@@ -97,13 +97,13 @@ async function fakeTv({ server = createSelfSignedCertificate({ commonName: 'atvr
       const fields = decode(payload);
       tv.received.push(fields);
       // Klienten svarer på konfigurasjonen: da aktiverer boksen fjernkontrollen og sjekker at den lever.
-      if (fields.has(1)) send(encode([[2, encode([[1, 622]])]]));
+      if (fields.has(1)) send(encode([[2, encode([[1, features]])]]));
       if (fields.has(2)) {
         send(encode([[8, encode([[1, 42]])]]));
         send(encode([[40, encode([[1, 1]])]]));
       }
     }));
-    send(encode([[1, encode([[1, 622], [2, encode([[1, 'Telia Play-boks'], [2, 'Telia']])]])]]));
+    send(encode([[1, encode([[1, features], [2, encode([[1, 'Telia Play-boks'], [2, 'Telia']])]])]]));
   });
 
   await Promise.all([pairing, remote].map((s) => new Promise((resolve) => s.listen(0, '127.0.0.1', resolve))));
@@ -192,7 +192,17 @@ test('paringskoden sjekkes lokalt: riktig kode gir hemmeligheten, feil kode avvi
 test('alle ekstra taster har en Android-tast, og alle tastene er gyldige kommandoer', () => {
   for (const key of ANDROIDTV_EXTRA_KEYS) assert.ok(ANDROIDTV_KEYS[key] !== undefined, key);
   for (const key of Object.keys(ANDROIDTV_KEYS)) assert.ok(COMMANDS.includes(key), key);
-  for (const app of APP_LINKS) assert.match(app.link, /^https:\/\//);
+  // Appene åpnes med pakkenavn via Play-butikken (https-lenker virket ikke på Telia-boksen).
+  const ids = new Set();
+  for (const app of ANDROIDTV_APPS) {
+    assert.match(app.package, /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, app.id);
+    assert.equal(app.link, `market://launch?id=${app.package}`);
+    assert.equal(app.icon, `/icons/apps/${app.id}.png`);
+    assert.ok(!ids.has(app.id), app.id);
+    ids.add(app.id);
+  }
+  assert.ok(ids.has('teliaplay'));
+  assert.equal(FEATURES, 615);
 });
 
 test('første gang: boksen avviser ukjent klient, viser kode, og riktig kode gir paret og klar økt', async () => {
@@ -302,8 +312,10 @@ test('taster, ⏯, apper, YouTube og strøm sendes som Android-hendelser og appl
     await settle(50);
     assert.deepEqual(keyCodes(tv), [19, 23, 4, 3, 24, 164, 85, 12, 186, 176, 26]);
     assert.ok(tv.received.filter((f) => f.has(10)).every((f) => first(message(f, 10), 2) === 3), 'kort trykk');
-    assert.deepEqual(appLinks(tv), ['https://www.netflix.com/title', 'https://www.youtube.com/watch?v=n61ULEU7CO0']);
-    assert.deepEqual((await atv.apps()).map((a) => a.id), APP_LINKS.map((a) => a.id));
+    assert.deepEqual(appLinks(tv), ['market://launch?id=com.netflix.ninja', 'https://www.youtube.com/watch?v=n61ULEU7CO0']);
+    const apps = await atv.apps();
+    assert.deepEqual(apps.map((a) => a.id), ANDROIDTV_APPS.map((a) => a.id));
+    assert.deepEqual(apps.find((a) => a.id === 'teliaplay'), { id: 'teliaplay', name: 'Telia Play', system: false, color: null, icon: '/icons/apps/teliaplay.png' });
     await assert.rejects(atv.launch('evil'), /Ukjent app/);
     await assert.rejects(atv.command('Dash'), /støttes ikke av Android TV/);
     // Boksen er på (remote_start), så «Slå på» sender ingenting.
@@ -313,6 +325,42 @@ test('taster, ⏯, apper, YouTube og strøm sendes som Android-hendelser og appl
   } finally {
     atv.disconnect();
     tv.close();
+  }
+});
+
+test('funksjonene avtales med boksen: vi svarer med det begge støtter, og uten applenker får brukeren beskjed', async () => {
+  const configured = (tv) => tv.received.filter((f) => f.has(1)).map((f) => first(message(f, 1), 1));
+  const activated = (tv) => tv.received.filter((f) => f.has(2)).map((f) => first(message(f, 2), 1));
+  // Boksen kan taster, skjermtastatur, strøm, volum og applenker (men ikke tale): vi bruker 615 & 614 = 614.
+  const full = await pairedSession();
+  try {
+    await settle(30);
+    assert.deepEqual(configured(full.tv), [614]);
+    assert.deepEqual(activated(full.tv), [614]);
+  } finally {
+    full.atv.disconnect();
+    full.tv.close();
+  }
+  // Boksen kan bare taster og skjermtastatur: apper og YouTube avvises med forklaring, taster virker.
+  const lines = [];
+  const limited = await pairedSession({ tv: { features: 2 | 4 }, session: { log: (line) => lines.push(line) } });
+  try {
+    await settle(30);
+    assert.deepEqual(configured(limited.tv), [6]);
+    await assert.rejects(limited.atv.launch('teliaplay'), (error) => error.message === NO_APP_LINKS && error.status === 409);
+    await assert.rejects(limited.atv.playYoutube('n61ULEU7CO0'), (error) => error.message === NO_APP_LINKS);
+    await limited.atv.command('Home');
+    await settle(30);
+    assert.deepEqual(appLinks(limited.tv), []);
+    assert.deepEqual(keyCodes(limited.tv), [3]);
+    assert.ok(lines.includes('Android TV: boksen støtter ikke applenker'), lines.join('\n'));
+    // Boksen melder hvilken app som er åpen (remote_ime_key_inject.app_info.app_package).
+    limited.tv.sendToAll(encode([[20, encode([[1, encode([[1, 1], [12, 'no.get.play.tv']])]])]]));
+    await waitFor(() => limited.atv.currentApp === 'no.get.play.tv');
+    assert.ok(lines.includes('Android TV: åpen app no.get.play.tv'));
+  } finally {
+    limited.atv.disconnect();
+    limited.tv.close();
   }
 });
 

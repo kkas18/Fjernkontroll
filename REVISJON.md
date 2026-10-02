@@ -329,7 +329,7 @@ Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og an
 | Fjernkontroll | TLS på port 6466 med klientsertifikatet. Protobuf-meldinger: konfigurasjon, aktivering, ping, taster (Android KeyEvent), applenker og tekst (IME) |
 | Sikkerhet | Boksens sertifikat låses ved første tilkobling. Endres det, stopper appen og ber om ny paring |
 | Avvisning | En ukjent eller glemt klient, enten avvist i TLS-håndtrykket eller lukket uten svar (TLS 1.3), starter paring av seg selv |
-| Apper | Protokollen har ingen appliste. Appen viser snarveier via applenker: YouTube, Netflix, NRK TV, TV 2 Play, Disney+, Max, Prime Video og Viaplay. YouTube-søk spilles av med `youtube.com/watch`-lenke |
+| Apper | Protokollen har ingen appliste. Appen viser snarveier via applenker. I 2.10.2 ble dette endret til pakkenavn, se nedenfor. YouTube-søk spilles av med `youtube.com/watch`-lenke |
 | Søk | mDNS etter `_androidtvremote2._tcp.local` (egen DNS-tolker med komprimering), samtidig med SSDP |
 | Grensesnitt | «Android TV» under «Legg til med IP», kodevinduet, og merknaden «Skriv inn kode». «Kilde» er skjult, siden en boks ikke har innganger |
 
@@ -363,3 +363,46 @@ Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og an
 - `npm run verify` består.
 - Kotlin 30/30 tester.
 - Chromium: feillinjen vises i kodevinduet, og varselet ligger synlig over et åpent ark.
+
+### Rettet i 2.10.2: apper startet ikke på Telia-boksen, og ikonene var bokstaver
+**Brukerens tilbakemelding:** Ingen av appene startet når de ble trykket på i Fjern, og ikonene var ikke riktige.
+
+**Årsak:**
+- Appene ble åpnet med nettadresser (`https://www.netflix.com/title` og lignende), slik eksemplene for Home Assistant gjør. Det virker på mange Google TV-er. Telia-boksen (Android TV fra operatør) har derimot ingen nettleser. Når ingen app tar imot adressen, skjer ingenting, og boksen gir ingen feilmelding tilbake.
+- Funksjonsmasken var fast (622). Den ba om tale og ikke ping, og ble ikke tilpasset det boksen oppgir. androidtvremote2 bruker bare det begge sider støtter.
+- Android TV har ingen ikoner å hente, så alle appene fikk bokstavikoner. Telia Play manglet i listen.
+
+**Utbedring:**
+- Appene åpnes med pakkenavn, `market://launch?id=<pakke>`. Play-butikken på boksen starter da appen. Dette er samme metode som androidtvremote2 bruker når den får et app-id. Hvert pakkenavn er sjekket mot Google Play (norsk butikk):
+
+  | App | Pakkenavn |
+  |---|---|
+  | Telia Play | `no.get.play.tv` (TV-versjonen) |
+  | NRK TV | `no.nrk.tv` |
+  | TV 2 Play | `no.tv2.sumo` |
+  | Netflix | `com.netflix.ninja` |
+  | YouTube | `com.google.android.youtube.tv` |
+  | Disney+ | `com.disney.disneyplus` |
+  | HBO Max | `com.wbd.stream` |
+  | Prime Video | `com.amazon.amazonvideo.livingroom` |
+  | Viaplay | `com.viaplay.android` |
+  | Spotify | `com.spotify.tv.android` |
+  | Apple TV | `com.apple.atve.androidtv.appletv` |
+
+- Ny funksjonsmaske 615: ping, taster, skjermtastatur, strøm, volum og applenker. Den snittes med det boksen oppgir, både i konfigurasjonen og i aktiveringen.
+  - Støtter ikke boksen applenker, får brukeren en tydelig melding i stedet for at ingenting skjer.
+  - Feilsøkingsloggen viser:
+    - hva boksen støtter
+    - hvilken pakke som åpnes
+    - hvilken app boksen melder som åpen
+- Appenes egne butikkikoner (128 px PNG, 2–17 kB) følger med i `public/icons/apps/`. Grensesnittet godtar bare stier på formen `/icons/apps/<id>.png`. Ingen ikoner hentes fra nettet mens appen kjører.
+- Merkefarge for Telia Play i reserveikonet.
+
+**Verifisert:**
+- `npm run verify` består. Ny test mot den falske boksen sjekker at:
+  - funksjonene snittes (622 gir 614)
+  - en boks uten applenker gir meldingen og ingen sendt lenke
+  - meldingen om åpen app leses
+- Andre tester sjekker at hvert ikon er en ekte 128 px PNG, og at fremmede ikonstier avvises.
+- Kotlin: nye tester for pakkenavn, funksjonssnitt og ikonfiler. En test sjekker også at app-listen er lik Node-broens.
+- **Ikke verifisert:** mot en ekte Telia-boks. Startes en app fortsatt ikke, viser feilsøkingsloggen hva boksen oppgir at den støtter.

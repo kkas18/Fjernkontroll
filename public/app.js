@@ -1,6 +1,6 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
 import {
-  addRecent, BRIDGE_DOWN, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
+  addRecent, BRIDGE_DOWN, bundledIcon, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
   normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, typeLabel,
 } from './logic.js';
 
@@ -290,7 +290,8 @@ function saveFavorites(ids) {
   storage.write('fjern-favorites', all);
 }
 
-// Ikonet hentes fra TV-en via broen. Til det er lastet (eller hvis det mangler) vises forbokstaver.
+// Ikonet hentes fra TV-en via broen, eller følger med appen (Android TV). Til det er lastet
+// (eller hvis det mangler) vises forbokstaver.
 function appIcon(app, size = 'm') {
   const box = document.createElement('span');
   box.className = `app-icon ${size}`;
@@ -301,7 +302,7 @@ function appIcon(app, size = 'm') {
   img.alt = '';
   img.loading = 'lazy';
   img.decoding = 'async';
-  img.src = `/api/icon/${encodeURIComponent(app.id)}?tv=${encodeURIComponent(state.device?.host || '')}`;
+  img.src = bundledIcon(app) || `/api/icon/${encodeURIComponent(app.id)}?tv=${encodeURIComponent(state.device?.host || '')}`;
   img.addEventListener('load', () => box.classList.add('has-image'));
   img.addEventListener('error', () => img.remove());
   box.append(img);

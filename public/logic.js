@@ -95,6 +95,7 @@ const BRANDS = [
   [/^prime|amazon/i, '#0b6fc0', 'PV'],
   [/^spotify/i, '#15803d', 'S'],
   [/^viaplay/i, '#5a1f8f', 'V'],
+  [/^telia/i, '#6a0ea8', 'TP'],
   [/^apple\s?tv/i, '#2a2a2e', 'tv'],
   [/^twitch/i, '#7432e0', 'T'],
   [/^plex/i, '#8a5a00', 'P'],
@@ -103,6 +104,12 @@ export function brandFor(name) {
   const text = String(name || '').trim();
   const hit = BRANDS.find(([pattern]) => pattern.test(text));
   return hit ? { color: hit[1], label: hit[2] } : null;
+}
+
+// Medfølgende appikon (public/icons/apps/). Bare egne, faste stier godtas.
+export function bundledIcon(app) {
+  const icon = app?.icon;
+  return typeof icon === 'string' && /^\/icons\/apps\/[a-z0-9]{1,32}\.png$/.test(icon) ? icon : null;
 }
 
 // Bokstavikon brukes til TV-ens eget ikon er lastet, eller hvis det mangler.

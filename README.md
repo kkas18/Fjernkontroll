@@ -57,7 +57,7 @@ Eldre Samsung-modeller (før 2016), Apple TV og rene IR-TV-er støttes ikke. Son
 
 På Samsung finnes ikke appikoner over nettet, så appene vises med merkefarge og kortnavn. Innganger er kildemenyen og HDMI 1–4.
 
-På Android TV har protokollen ingen appliste. Appen viser snarveier til vanlige strømmetjenester (YouTube, Netflix, NRK TV, TV 2 Play, Disney+, Max, Prime Video, Viaplay), som åpnes med applenker. Er en app ikke installert på boksen, skjer ingenting. «Skriv på TV» virker når skjermtastaturet er åpent på boksen, og «Slå på» bare mens appen er koblet til (boksen i hvilemodus).
+På Android TV har protokollen ingen appliste. Appen viser snarveier til vanlige strømmetjenester med egne ikoner: Telia Play, NRK TV, TV 2 Play, Netflix, YouTube, Disney+, HBO Max, Prime Video, Viaplay, Spotify og Apple TV. De åpnes med pakkenavnet (`market://launch?id=…`), som Play-butikken på boksen sender videre til appen. Er en app ikke installert, åpner boksen siden for appen i Play-butikken. «Skriv på TV» virker når skjermtastaturet er åpent på boksen, og «Slå på» bare mens appen er koblet til (boksen i hvilemodus).
 
 ## Hvorfor en lokal bro?
 

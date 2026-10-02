@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { addRecent, MAX_RECENT, BRIDGE_DOWN, DEFAULT_NAMES, brandFor, defaultFavorites, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode, typeLabel } from '../public/logic.js';
+import { addRecent, MAX_RECENT, BRIDGE_DOWN, DEFAULT_NAMES, brandFor, bundledIcon, defaultFavorites, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode, typeLabel } from '../public/logic.js';
 import { isPrivateIPv4 as serverIsPrivate } from '../lib/validate.mjs';
+import { ANDROIDTV_APPS } from '../lib/androidtv.mjs';
 
 test('klient og bro er enige om hva som er en lokal IP', () => {
   for (const ip of ['10.1.2.3', '172.16.0.1', '172.32.0.1', '192.168.1.1', '192.169.1.1', '127.0.0.1', '8.8.8.8', '300.1.1.1', 'x']) {
@@ -83,7 +84,8 @@ test('systemapper sorteres nederst', () => {
 test('bokstavikon og navn', () => {
   assert.equal(initials('NRK TV'), 'NRK');
   assert.equal(initials('Netflix'), 'N');
-  assert.equal(initials('telia play'), 'T');
+  assert.equal(initials('telia play'), 'TP');
+  assert.equal(initials('kanal fem'), 'K');
   assert.equal(normalizeName({ type: 'lg', name: 'LG webOS · 192.168.0.3' }), 'LG-TV');
   assert.equal(normalizeName({ type: 'roku', name: 'Roku · 192.168.0.9' }), 'Roku');
   assert.equal(normalizeName({ type: 'lg', name: 'LG OLED55C1' }), 'LG OLED55C1');
@@ -113,7 +115,7 @@ test('reserveikoner for kjente apper har merkefarge, kortnavn og lesbar hvit tek
   assert.equal(initials('YouTube'), 'YT');
   assert.equal(initials('TV 2 Play'), 'TV2');
   assert.equal(initials('HBO Max'), 'max');
-  assert.equal(brandFor('Telia Play'), null);
+  assert.equal(initials('Telia Play'), 'TP');
   assert.equal(fallbackColor({ id: 'x', name: 'Netflix' }), brandFor('Netflix').color);
   assert.equal(fallbackColor({ id: 'x', name: 'Netflix', color: '#123456' }), '#123456', 'TV-ens egen farge vinner');
   const luminance = (hex) => {
@@ -121,12 +123,27 @@ test('reserveikoner for kjente apper har merkefarge, kortnavn og lesbar hvit tek
       .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
-  const names = ['Netflix', 'YouTube', 'NRK TV', 'TV 2 Play', 'Disney+', 'HBO Max', 'Prime Video', 'Spotify', 'Viaplay', 'Apple TV', 'Twitch', 'Plex'];
+  const names = ['Netflix', 'YouTube', 'NRK TV', 'TV 2 Play', 'Disney+', 'HBO Max', 'Prime Video', 'Spotify', 'Viaplay', 'Telia Play', 'Apple TV', 'Twitch', 'Plex'];
   for (const name of names) {
     const { color } = brandFor(name);
     const contrast = 1.05 / (luminance(color) + 0.05);
     assert.ok(contrast >= 4.5, `${name}: kontrast ${contrast.toFixed(2)} mot hvit`);
   }
+});
+
+test('Android TV-appene har medfølgende ikoner (ekte PNG), og bare egne ikonstier godtas', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  for (const app of ANDROIDTV_APPS) {
+    assert.equal(bundledIcon(app), app.icon, app.id);
+    const bytes = fs.readFileSync(new URL(`../public${app.icon}`, import.meta.url));
+    assert.ok(bytes.subarray(0, 8).equals(png), `${app.id}: ikke PNG`);
+    assert.equal(bytes.readUInt32BE(16), 128, `${app.id}: bredde`);
+    assert.ok(bytes.length < 32 * 1024, `${app.id}: for stor fil`);
+  }
+  for (const icon of [undefined, '', 'https://evil.example/x.png', '/icons/apps/../../app.js', '/icons/apps/x.svg', '//evil/icons/apps/x.png', 42]) {
+    assert.equal(bundledIcon({ icon }), null, String(icon));
+  }
+  assert.equal(bundledIcon(null), null);
 });
 
 test('siste YouTube-søk: nyeste først, uten duplikater, med tak', () => {

@@ -61,7 +61,11 @@ class Bridge(
     }
     // Ikonadressen er intern: grensesnittet henter ikonet via /api/icon/<id>.
     private fun List<App>.toJson() = JSONArray().also { array ->
-        forEach { array.put(JSONObject().put("id", it.id).put("name", it.name).put("system", it.system).put("color", it.color ?: JSONObject.NULL)) }
+        forEach {
+            val app = JSONObject().put("id", it.id).put("name", it.name).put("system", it.system).put("color", it.color ?: JSONObject.NULL)
+            it.bundledIcon?.let { icon -> app.put("icon", icon) }
+            array.put(app)
+        }
     }
 
     /** Miniatyrbilde for en YouTube-video, som (MIME-type, bytes). Brukes av /api/ytthumb/-ruten. */

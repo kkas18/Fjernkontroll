@@ -79,7 +79,6 @@ class AndroidTvLogicTest {
         AndroidTvSession.KEYS.keys.forEach { assertTrue(it, it in Validate.COMMANDS) }
         assertEquals(7, AndroidTvSession.KEYS["Num0"])
         assertEquals(186, AndroidTvSession.KEYS["Blue"])
-        AndroidTvSession.APP_LINKS.forEach { (id, _, link) -> Validate.appId(id); assertTrue(link.startsWith("https://")) }
         assertEquals(Device("androidtv", "192.168.1.60", "Android TV"), Validate.device("androidtv", "192.168.1.60", ""))
         val key = Proto.decode(AndroidTvSession.remoteKey(19)).message(10)
         assertEquals(19L, key?.long(1))
@@ -87,14 +86,46 @@ class AndroidTvLogicTest {
         assertEquals("https://www.youtube.com", Proto.decode(AndroidTvSession.remoteAppLink("https://www.youtube.com")).message(90)?.text(1))
     }
 
+    private fun repoFile(relative: String): File {
+        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
+        while (dir != null && !File(dir, relative).exists()) dir = dir.parentFile
+        return File(dir ?: throw AssertionError("fant ikke $relative"), relative)
+    }
+
+    /**
+     * Regresjon: https-applenker startet ingenting på Telia-boksen. Appene åpnes med pakkenavn via Play-butikken,
+     * listen er den samme som i Node-broen, og hvert ikon finnes i public/icons/apps/.
+     */
+    @Test fun appsLaunchByPackageAndMatchTheNodeBridge() {
+        val node = repoFile("lib/androidtv.mjs").readText()
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)
+        assertTrue(AndroidTvSession.APPS.any { it.id == "teliaplay" && it.pkg == "no.get.play.tv" })
+        assertEquals(AndroidTvSession.APPS.size, AndroidTvSession.APPS.map { it.id }.toSet().size)
+        AndroidTvSession.APPS.forEach { app ->
+            Validate.appId(app.id)
+            assertEquals("market://launch?id=${app.pkg}", app.link)
+            assertTrue("${app.id} mangler i lib/androidtv.mjs", node.contains("{ id: '${app.id}', name: '${app.name}', package: '${app.pkg}' }"))
+            val icon = repoFile("public${app.icon}")
+            assertArrayEquals(png, icon.readBytes().copyOfRange(0, 4))
+        }
+        assertEquals(AndroidTvSession.APPS.size, Regex("package: '").findAll(node).count())
+    }
+
+    @Test fun featuresAreIntersectedWithTheBox() {
+        assertEquals(615, AndroidTvSession.FEATURES)
+        assertEquals(614, AndroidTvSession.activeFeatures(622))
+        assertEquals(6, AndroidTvSession.activeFeatures(6))
+        assertEquals(615, AndroidTvSession.activeFeatures(0))
+        assertEquals(614L, Proto.decode(AndroidTvSession.remoteConfigure(614)).message(1)?.long(1))
+        assertEquals(6L, Proto.decode(AndroidTvSession.remoteSetActive(6)).message(2)?.long(1))
+    }
+
     /**
      * Regresjon: ruten «pair» manglet i NativeBridge, så paringskoden aldri nådde boksen i Android-appen.
      * Alle ruter grensesnittet kaller (api('…') og route: '…'), må være tillatt.
      */
     @Test fun everyRouteTheUiCallsIsAllowedInTheApp() {
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
-        while (dir != null && !File(dir, "public/app.js").exists()) dir = dir.parentFile
-        val source = File(dir ?: throw AssertionError("fant ikke public/app.js"), "public/app.js").readText()
+        val source = repoFile("public/app.js").readText()
         val used = (Regex("api\\('([a-z]+)'").findAll(source) + Regex("route: '([a-z]+)'").findAll(source)).map { it.groupValues[1] }.toSet() + "connect"
         assertTrue("for få ruter funnet: $used", used.size >= 10)
         used.forEach { assertTrue("ruten «$it» er ikke tillatt i Bridge.ROUTES", it in Bridge.ROUTES) }
