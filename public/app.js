@@ -123,9 +123,19 @@ let toastTimer;
 function toast(message) {
   const el = $('#toast');
   el.textContent = message;
-  el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+  // Åpne ark ligger i nettleserens øverste lag. Meldingen legges der på nytt hver gang, så den havner over dem.
+  if (el.showPopover) {
+    try {
+      if (el.matches(':popover-open')) el.hidePopover();
+      el.showPopover();
+    } catch { /* popover støttes ikke: vises som før */ }
+  }
+  requestAnimationFrame(() => el.classList.add('show'));
+  toastTimer = setTimeout(() => {
+    el.classList.remove('show');
+    toastTimer = setTimeout(() => { try { el.hidePopover?.(); } catch { /* allerede skjult */ } }, 200);
+  }, 3200);
 }
 
 function haptic(pattern = 10) {
@@ -264,6 +274,7 @@ function promptPairing() {
 
 function openPair() {
   $('#pairCode').value = '';
+  $('#pairError').hidden = true;
   $('#pairDialog').showModal();
   $('#pairCode').focus();
 }
@@ -667,26 +678,34 @@ $('#pairCode').addEventListener('input', (event) => {
   // Koden er heksadesimal: store bokstaver, bare 0–9 og A–F.
   const input = event.currentTarget;
   input.value = input.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 6);
+  $('#pairError').hidden = true;
 });
+// Feil vises rett under feltet, der brukeren ser.
+function pairError(message) {
+  $('#pairError').textContent = message;
+  $('#pairError').hidden = false;
+}
 $('#pairForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const code = $('#pairCode').value.trim();
   if (code.length !== 6) {
-    toast('Koden er seks tegn, slik den vises på TV-en.');
+    pairError('Koden er seks tegn, slik den vises på TV-en.');
     $('#pairCode').focus();
     return;
   }
   const button = $('#pairSubmit');
   button.disabled = true;
+  button.textContent = 'Sjekker koden …';
   try {
     applyStatus(await api('pair', { code }));
     closeSheet($('#pairDialog'));
     toast('Paret. Kobler til …');
   } catch (error) {
-    toast(error.message);
+    pairError(error.message);
     $('#pairCode').select();
   } finally {
     button.disabled = false;
+    button.textContent = 'Par';
     render();
   }
 });

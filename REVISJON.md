@@ -347,3 +347,19 @@ Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og an
 - **Krysstest:** Kotlin-økten mot den falske boksen i Node over ekte TLS (ikke lagt til i repoet). Hele løpet besto: avvist ukjent klient, kode, paret, klar, taster, applenker, tekst og ny tilkobling uten kode.
 - Chromium: kodevinduet åpnes av seg selv. Ugyldige tegn filtreres, feil kode gir melding, og riktig kode kobler til.
 - **Ikke verifisert:** mot en ekte Telia-boks. Hvis noe ikke virker på din boks, send feilsøkingsloggen.
+
+### Rettet i 2.10.1: «Par» gjorde ingenting i Android-appen
+**Brukerens tilbakemelding:** Koden ble skrevet inn, men ingenting skjedde etter trykk på «Par».
+
+**Årsak:** Ruten `pair` manglet i listen over ruter som `NativeBridge` slipper gjennom fra grensesnittet. Appen svarte «Ukjent adresse.», og koden nådde aldri boksen. Nettversjonen (Node-broen) var ikke rammet. Feilmeldingen ble i tillegg skjult, fordi varsler lå under åpne ark, som ligger i nettleserens øverste lag.
+
+**Utbedring:**
+- Rutelisten finnes nå bare ett sted (`Bridge.ROUTES`). En ny Kotlin-test leser `public/app.js` og sjekker at alle ruter grensesnittet kaller, er tillatt. Testen feiler uten rettingen («ruten «pair» er ikke tillatt») og består med den.
+- Varsler vises som popover i øverste lag, over åpne ark. Det gjaldt alle varsler som ble vist mens et ark var åpent, ikke bare paringen.
+- Kodevinduet viser feil rett under feltet, og knappen viser «Sjekker koden …» mens appen venter på svar.
+- Feilsøkingsloggen viser om koden ble sendt til boksen, eller avvist lokalt av sjekksummen.
+
+**Verifisert:**
+- `npm run verify` består.
+- Kotlin 30/30 tester.
+- Chromium: feillinjen vises i kodevinduet, og varselet ligger synlig over et åpent ark.

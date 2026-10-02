@@ -248,6 +248,7 @@
       <label class="field-label" for="pairCode">Koden på TV-skjermen</label>
       <input id="pairCode" class="field large mono code" maxlength="6" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="A1B2C3" aria-describedby="pairHint">
       <p id="pairHint" class="hint">Seks tegn, tall og bokstavene A–F. Koden vises på TV-en så lenge paringen pågår.</p>
+      <p id="pairError" class="hint error" role="alert" hidden></p>
       <button id="pairSubmit" type="submit" class="button primary">Par</button>
     </form>
   </dialog>
@@ -353,7 +354,7 @@
     <div id="nowYt" class="nowbar floating" hidden></div>
   </section>
 
-  <div id="toast" class="toast" role="alert"></div>
+  <div id="toast" class="toast" role="alert" popover="manual"></div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

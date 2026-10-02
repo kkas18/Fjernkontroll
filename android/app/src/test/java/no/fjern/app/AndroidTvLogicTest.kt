@@ -87,6 +87,20 @@ class AndroidTvLogicTest {
         assertEquals("https://www.youtube.com", Proto.decode(AndroidTvSession.remoteAppLink("https://www.youtube.com")).message(90)?.text(1))
     }
 
+    /**
+     * Regresjon: ruten «pair» manglet i NativeBridge, så paringskoden aldri nådde boksen i Android-appen.
+     * Alle ruter grensesnittet kaller (api('…') og route: '…'), må være tillatt.
+     */
+    @Test fun everyRouteTheUiCallsIsAllowedInTheApp() {
+        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
+        while (dir != null && !File(dir, "public/app.js").exists()) dir = dir.parentFile
+        val source = File(dir ?: throw AssertionError("fant ikke public/app.js"), "public/app.js").readText()
+        val used = (Regex("api\\('([a-z]+)'").findAll(source) + Regex("route: '([a-z]+)'").findAll(source)).map { it.groupValues[1] }.toSet() + "connect"
+        assertTrue("for få ruter funnet: $used", used.size >= 10)
+        used.forEach { assertTrue("ruten «$it» er ikke tillatt i Bridge.ROUTES", it in Bridge.ROUTES) }
+        assertTrue("pair" in used)
+    }
+
     @Test fun mdnsQueryAndCompressedResponse() {
         val query = Mdns.query()
         assertEquals(Mdns.SERVICE, Mdns.readName(query, 12).first)

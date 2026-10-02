@@ -515,7 +515,11 @@ class AndroidTvSession(
             if (conn == null || code != "needs-code") throw UserError("Ingen paring venter på kode. Velg enheten på nytt.", 409)
             val id = identity()
             val server = serverKey ?: throw UserError(PAIRING_FAILED, 409)
-            val secret = pairingSecret(id.certificate.publicKey, server, input) ?: throw UserError(WRONG_CODE)
+            val secret = pairingSecret(id.certificate.publicKey, server, input) ?: run {
+                log("Android TV: koden stemte ikke med sjekksummen, ble ikke sendt")
+                throw UserError(WRONG_CODE)
+            }
+            log("Android TV: kode sendt til boksen")
             status = CHECKING
             code = null
             CompletableDeferred<Unit>().also {

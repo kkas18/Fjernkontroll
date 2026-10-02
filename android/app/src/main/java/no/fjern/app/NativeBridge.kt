@@ -41,12 +41,10 @@ class NativeBridge(
         webView.post { webView.evaluateJavascript("window.__fjernVoice && window.__fjernVoice(${JSONObject.quote(id)}, $value)", null) }
     }
 
-    private val routes = setOf("status", "scan", "connect", "repair", "apps", "launch", "command", "text", "diagnostics", "inputs", "input", "ytsearch", "ytplay")
-
     @JavascriptInterface
     fun request(id: String, route: String, body: String?) {
         scope.launch {
-            val (status, json) = if (route in routes) bridge.handle(route, body) else 404 to JSONObject().put("error", "Ukjent adresse.")
+            val (status, json) = if (route in Bridge.ROUTES) bridge.handle(route, body) else 404 to JSONObject().put("error", "Ukjent adresse.")
             val result = JSONObject().put("status", status).put("body", json).toString()
             webView.post {
                 webView.evaluateJavascript("window.__fjernNative && window.__fjernNative(${JSONObject.quote(id)}, $result)", null)

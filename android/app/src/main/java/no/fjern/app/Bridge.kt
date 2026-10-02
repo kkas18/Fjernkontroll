@@ -24,6 +24,14 @@ class Bridge(
     private val rokuHealthTtlMs: Long = 10_000,
     private val about: String = "Fjern",
 ) {
+    companion object {
+        /** Alle ruter grensesnittet kan kalle. NativeBridge slipper bare disse gjennom (testet mot public/app.js). */
+        val ROUTES = setOf(
+            "status", "scan", "connect", "repair", "pair", "apps", "launch", "command", "text", "diagnostics",
+            "inputs", "input", "ytsearch", "ytplay",
+        )
+    }
+
     private val lock = Mutex()
     private var selected: Device? = null
     private var rokuHealth = Triple<String?, Boolean, Long>(null, false, 0L)

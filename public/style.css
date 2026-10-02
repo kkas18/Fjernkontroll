@@ -501,9 +501,13 @@ use[href="#i-play"], use[href="#i-rewind"], use[href="#i-forward"] { fill: curre
 .field:focus { border-color: var(--text); outline: none; box-shadow: 0 0 0 1px var(--text); }
 form .button { width: 100%; margin-top: var(--s-5); }
 
-/* Kort melding ved feil på en enkeltkommando */
+/* Kort melding ved feil på en enkeltkommando. Vises som popover i øverste lag, så den ligger over åpne ark. */
 .toast {
   position: fixed;
+  inset: auto auto auto 50%;
+  margin: 0;
+  border: 0;
+  overflow: visible;
   left: 50%;
   bottom: calc(var(--s-5) + env(safe-area-inset-bottom));
   max-width: min(calc(100vw - 2 * var(--s-4)), 440px);
@@ -523,6 +527,7 @@ form .button { width: 100%; margin-top: var(--s-5); }
   z-index: 10;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.hint.error { color: var(--err); font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
