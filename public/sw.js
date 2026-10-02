@@ -1,6 +1,6 @@
 // Nettverk først, med hurtigbuffer som reserve når broen ikke svarer.
 // Versjonen må være lik "version" i package.json (sjekkes av testene).
-const CACHE = 'fjern-2.10.4';
+const CACHE = 'fjern-2.11.0';
 const ASSETS = [
   '/',
   '/style.css',

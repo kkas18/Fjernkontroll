@@ -485,3 +485,38 @@ Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og an
   - **YouTube** mot ekte nett: forslag og 17–18 treff uten Enter.
   - Ingen JS-feil.
 - **Ikke verifisert:** mot en ekte Telia-boks. Om boksen tolker intent-lenker, vet vi først når den prøves. Feilsøkingsloggen viser hver lenke og hva boksen svarte.
+
+### 2.11.0: nytt, kompakt design for Android-telefoner (Samsung Galaxy)
+**Brukerens ønske:** Et helt nytt, elegant og brukervennlig design som er kompakt på Android-telefoner som Samsung Galaxy.
+
+**Problemer med forrige design (fra brukerens skjermbilde):**
+- Kontrollene lå som fire løse blokker med ulik form: verktøylinje uten flate, volum og kanal på hver side, menyrad og avspillingsrad. Det ga uro og et tomt felt midt på.
+- Styrekorset ble begrenset av bredden, fordi volum og kanal sto ved siden av. Det ble lite (182 px) på en Galaxy S.
+- Den oransje aksenten og den store strømknappen konkurrerte med innholdet.
+
+**Nytt design (inspirert av Samsung One UI og Googles TV-fjernkontroll):**
+- **Ett kontrollkort** med styrekorset i full bredde. Under det kommer Tilbake, Hjem og Lyd av, deretter vannrette vippeknapper for volum og kanal (− VOL + og ▼ CH ▲), og til slutt avspilling med ⏯ i midten.
+- **Snarveiene nederst** (Kilde, 123, Oppsett, Mer), som navigasjonslinjen i One UI.
+- **Søk, apper og kontroller samlet nederst** ved tommelen. Ledig høyde havner under topplinjen.
+- **Rolig palett** med én blå aksent. OK har hvit tekst med kontrast 4,7:1. Strømknappen er mindre, og søkefeltet er tynnere.
+- **Tilpasset størrelse:**
+  - Styrekorset har fast mål ut fra kortets bredde (container-enheter) og skjermhøyden.
+  - Kortet følger innholdet, så det blir ikke tomrom i det.
+  - I smale kort (320 px) vises bare ikonene på Tilbake, Hjem og Lyd av. Teksten beholdes for skjermlesere.
+  - Når en TV ikke har kanaler, fyller volum hele raden.
+
+**Verifisert (Chromium, skjermbilder):**
+
+| Skjerm | Mål | Styrekors |
+|---|---|---|
+| Galaxy S | 360×732 | 244 px (før: 182 px) |
+| Galaxy S Plus | 384×784 | 272 px |
+| Galaxy A | 412×868 | 272 px |
+| Liten | 360×640 | 152 px |
+| Minst | 320×568 | 140 px |
+
+- Ingen rulling, og ingenting havner utenfor skjermen.
+- Alle knapper er minst 40 px.
+- «Mer», talltastene og YouTube er sjekket med de nye fargene.
+- `npm run verify` 134/134 og Kotlin 38/38.
+- Ende-til-ende-testen mot den falske boksen besto med det nye oppsettet: taster, apper, «Prøv en annen måte» og YouTube.

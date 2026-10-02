@@ -99,46 +99,49 @@
         <div id="appGrid" class="fav-grid"></div>
       </section>
 
-      <nav class="toolbar" aria-label="Snarveier">
+      <div class="deck">
+        <div class="cluster">
+          <div class="dpad" role="group" aria-label="Navigasjon">
+            <button class="dir up" type="button" data-key="Up" data-repeat aria-label="Opp"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+            <button class="dir left" type="button" data-key="Left" data-repeat aria-label="Venstre"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
+            <button class="dir right" type="button" data-key="Right" data-repeat aria-label="Høyre"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button>
+            <button class="dir down" type="button" data-key="Down" data-repeat aria-label="Ned"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+            <button class="ok" type="button" data-key="Select">OK</button>
+          </div>
+        </div>
+
+        <div class="keyrow" role="group" aria-label="Meny">
+          <button class="key" type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
+          <button class="key" type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
+          <button class="key" type="button" data-key="Mute"><svg class="icon" aria-hidden="true"><use href="#i-mute"/></svg><span>Lyd av</span></button>
+        </div>
+
+        <div class="levels">
+          <div class="rocker" role="group" aria-label="Volum">
+            <button type="button" data-key="VolumeDown" data-repeat aria-label="Volum ned"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <span class="rocker-label" aria-hidden="true">VOL</span>
+            <button type="button" data-key="VolumeUp" data-repeat aria-label="Volum opp"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          </div>
+          <div id="channelRocker" class="rocker" role="group" aria-label="Kanal">
+            <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-down"/></svg></button>
+            <span class="rocker-label" aria-hidden="true">CH</span>
+            <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-up"/></svg></button>
+          </div>
+        </div>
+
+        <div class="transport" role="group" aria-label="Avspilling">
+          <button type="button" data-key="Rewind" aria-label="Spol tilbake"><svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg></button>
+          <button type="button" class="primary-play" data-key="PlayPause" aria-label="Spill av / pause"><svg class="icon" aria-hidden="true"><use href="#i-playpause"/></svg></button>
+          <button type="button" data-key="FastForward" aria-label="Spol fram"><svg class="icon" aria-hidden="true"><use href="#i-forward"/></svg></button>
+        </div>
+      </div>
+
+      <nav class="dock" aria-label="Snarveier">
         <button id="inputOpen" class="tool" type="button" data-cap="inputs"><svg class="icon" aria-hidden="true"><use href="#i-input"/></svg><span>Kilde</span></button>
         <button id="numOpen" class="tool" type="button" data-cap="Num1"><svg class="icon" aria-hidden="true"><use href="#i-numpad"/></svg><span>123</span></button>
         <button class="tool" type="button" data-key="Settings" data-cap="Settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>Oppsett</span></button>
         <button id="moreOpen" class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span>Mer</span></button>
       </nav>
-
-      <div class="cluster">
-        <div class="rocker" role="group" aria-label="Volum">
-          <button type="button" data-key="VolumeUp" data-repeat aria-label="Volum opp"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
-          <span class="rocker-label" aria-hidden="true">VOL</span>
-          <button type="button" data-key="VolumeDown" data-repeat aria-label="Volum ned"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
-        </div>
-
-        <div class="dpad" role="group" aria-label="Navigasjon">
-          <button class="dir up" type="button" data-key="Up" data-repeat aria-label="Opp"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
-          <button class="dir left" type="button" data-key="Left" data-repeat aria-label="Venstre"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
-          <button class="dir right" type="button" data-key="Right" data-repeat aria-label="Høyre"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button>
-          <button class="dir down" type="button" data-key="Down" data-repeat aria-label="Ned"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
-          <button class="ok" type="button" data-key="Select">OK</button>
-        </div>
-
-        <div id="channelRocker" class="rocker" role="group" aria-label="Kanal">
-          <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-up"/></svg></button>
-          <span class="rocker-label" aria-hidden="true">CH</span>
-          <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-down"/></svg></button>
-        </div>
-      </div>
-
-      <div class="segmented-bar" role="group" aria-label="Meny">
-        <button type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
-        <button type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
-        <button type="button" data-key="Mute"><svg class="icon" aria-hidden="true"><use href="#i-mute"/></svg><span>Lyd av</span></button>
-      </div>
-
-      <div class="segmented-bar transport" role="group" aria-label="Avspilling">
-        <button type="button" data-key="Rewind" aria-label="Spol tilbake"><svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg></button>
-        <button type="button" class="primary-play" data-key="PlayPause" aria-label="Spill av / pause"><svg class="icon" aria-hidden="true"><use href="#i-playpause"/></svg></button>
-        <button type="button" data-key="FastForward" aria-label="Spol fram"><svg class="icon" aria-hidden="true"><use href="#i-forward"/></svg></button>
-      </div>
     </main>
 
     <section id="empty" class="empty" aria-labelledby="emptyTitle" hidden>
