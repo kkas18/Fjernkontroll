@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Fjern">
-  <meta name="description" content="Fjernkontroll for Roku, LG webOS og Samsung på lokalnettet.">
+  <meta name="description" content="Fjernkontroll for Roku, LG webOS, Samsung og Android TV på lokalnettet.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
@@ -99,46 +99,49 @@
         <div id="appGrid" class="fav-grid"></div>
       </section>
 
-      <nav class="toolbar" aria-label="Snarveier">
+      <div class="deck">
+        <div class="cluster">
+          <div class="dpad" role="group" aria-label="Navigasjon">
+            <button class="dir up" type="button" data-key="Up" data-repeat aria-label="Opp"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
+            <button class="dir left" type="button" data-key="Left" data-repeat aria-label="Venstre"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
+            <button class="dir right" type="button" data-key="Right" data-repeat aria-label="Høyre"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button>
+            <button class="dir down" type="button" data-key="Down" data-repeat aria-label="Ned"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
+            <button class="ok" type="button" data-key="Select">OK</button>
+          </div>
+        </div>
+
+        <div class="keyrow" role="group" aria-label="Meny">
+          <button class="key" type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
+          <button class="key" type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
+          <button class="key" type="button" data-key="Mute"><svg class="icon" aria-hidden="true"><use href="#i-mute"/></svg><span>Lyd av</span></button>
+        </div>
+
+        <div class="levels">
+          <div class="rocker" role="group" aria-label="Volum">
+            <button type="button" data-key="VolumeDown" data-repeat aria-label="Volum ned"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <span class="rocker-label" aria-hidden="true">VOL</span>
+            <button type="button" data-key="VolumeUp" data-repeat aria-label="Volum opp"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          </div>
+          <div id="channelRocker" class="rocker" role="group" aria-label="Kanal">
+            <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-down"/></svg></button>
+            <span class="rocker-label" aria-hidden="true">CH</span>
+            <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-up"/></svg></button>
+          </div>
+        </div>
+
+        <div class="transport" role="group" aria-label="Avspilling">
+          <button type="button" data-key="Rewind" aria-label="Spol tilbake"><svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg></button>
+          <button type="button" class="primary-play" data-key="PlayPause" aria-label="Spill av / pause"><svg class="icon" aria-hidden="true"><use href="#i-playpause"/></svg></button>
+          <button type="button" data-key="FastForward" aria-label="Spol fram"><svg class="icon" aria-hidden="true"><use href="#i-forward"/></svg></button>
+        </div>
+      </div>
+
+      <nav class="dock" aria-label="Snarveier">
         <button id="inputOpen" class="tool" type="button" data-cap="inputs"><svg class="icon" aria-hidden="true"><use href="#i-input"/></svg><span>Kilde</span></button>
         <button id="numOpen" class="tool" type="button" data-cap="Num1"><svg class="icon" aria-hidden="true"><use href="#i-numpad"/></svg><span>123</span></button>
         <button class="tool" type="button" data-key="Settings" data-cap="Settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>Oppsett</span></button>
         <button id="moreOpen" class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span>Mer</span></button>
       </nav>
-
-      <div class="cluster">
-        <div class="rocker" role="group" aria-label="Volum">
-          <button type="button" data-key="VolumeUp" data-repeat aria-label="Volum opp"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
-          <span class="rocker-label" aria-hidden="true">VOL</span>
-          <button type="button" data-key="VolumeDown" data-repeat aria-label="Volum ned"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
-        </div>
-
-        <div class="dpad" role="group" aria-label="Navigasjon">
-          <button class="dir up" type="button" data-key="Up" data-repeat aria-label="Opp"><svg class="icon" aria-hidden="true"><use href="#i-up"/></svg></button>
-          <button class="dir left" type="button" data-key="Left" data-repeat aria-label="Venstre"><svg class="icon" aria-hidden="true"><use href="#i-left"/></svg></button>
-          <button class="dir right" type="button" data-key="Right" data-repeat aria-label="Høyre"><svg class="icon" aria-hidden="true"><use href="#i-right"/></svg></button>
-          <button class="dir down" type="button" data-key="Down" data-repeat aria-label="Ned"><svg class="icon" aria-hidden="true"><use href="#i-down"/></svg></button>
-          <button class="ok" type="button" data-key="Select">OK</button>
-        </div>
-
-        <div id="channelRocker" class="rocker" role="group" aria-label="Kanal">
-          <button type="button" data-key="ChannelUp" aria-label="Neste kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-up"/></svg></button>
-          <span class="rocker-label" aria-hidden="true">CH</span>
-          <button type="button" data-key="ChannelDown" aria-label="Forrige kanal"><svg class="icon" aria-hidden="true"><use href="#i-caret-down"/></svg></button>
-        </div>
-      </div>
-
-      <div class="segmented-bar" role="group" aria-label="Meny">
-        <button type="button" data-key="Back"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg><span>Tilbake</span></button>
-        <button type="button" data-key="Home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Hjem</span></button>
-        <button type="button" data-key="Mute"><svg class="icon" aria-hidden="true"><use href="#i-mute"/></svg><span>Lyd av</span></button>
-      </div>
-
-      <div class="segmented-bar transport" role="group" aria-label="Avspilling">
-        <button type="button" data-key="Rewind" aria-label="Spol tilbake"><svg class="icon" aria-hidden="true"><use href="#i-rewind"/></svg></button>
-        <button type="button" class="primary-play" data-key="PlayPause" aria-label="Spill av / pause"><svg class="icon" aria-hidden="true"><use href="#i-playpause"/></svg></button>
-        <button type="button" data-key="FastForward" aria-label="Spol fram"><svg class="icon" aria-hidden="true"><use href="#i-forward"/></svg></button>
-      </div>
     </main>
 
     <section id="empty" class="empty" aria-labelledby="emptyTitle" hidden>
@@ -171,9 +174,10 @@
         <li class="web-only">Broen må kjøre i Termux: <code>npm start</code>. Appen åpnes på <code>localhost:8765</code>.</li>
         <li>Roku: slå på <i>Settings → System → Advanced system settings → Control by mobile apps</i>.</li>
         <li>LG webOS: godkjenn forespørselen som vises på TV-en første gang.</li>
+        <li>Android TV og Google TV (for eksempel Telia-boksen): skriv inn koden som vises på TV-en første gang.</li>
         <li>Samsung: trykk <i>Tillat</i> når TV-en spør første gang. Har du trykket <i>Avvis</i>, tillat Fjern under <i>Innstillinger → Generelt → Ekstern enhetsbehandling → Enhetstilkoblingsbehandling</i>.</li>
       </ol>
-      <p>Støtter Roku, LG webOS og Samsung (Tizen, 2016 og nyere). Google TV, eldre Samsung-modeller og rene IR-TV-er støttes ikke. Alt skjer lokalt, uten konto eller sky.</p>
+      <p>Støtter Roku, LG webOS, Samsung (Tizen, 2016 og nyere) og Android TV / Google TV. Eldre Samsung-modeller og rene IR-TV-er støttes ikke. Alt skjer lokalt, uten konto eller sky.</p>
       <p>LG: «LG Connect Apps» eller «Mobil TV på» må være slått på i TV-ens innstillinger (navnet varierer per modell).</p>
       <button id="diagOpen" class="button" type="button">Vis feilsøkingslogg</button>
     </details>
@@ -190,6 +194,7 @@
         <label><input type="radio" name="deviceType" value="roku" checked><span>Roku</span></label>
         <label><input type="radio" name="deviceType" value="lg"><span>LG webOS</span></label>
         <label><input type="radio" name="deviceType" value="samsung"><span>Samsung</span></label>
+        <label><input type="radio" name="deviceType" value="androidtv"><span>Android TV</span></label>
       </fieldset>
       <label class="field-label" for="ip">IP-adresse</label>
       <input id="ip" class="field mono" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="192.168.1.42" aria-describedby="ipHint" required>
@@ -235,6 +240,20 @@
     <ul id="allApps" class="app-list"></ul>
     <h3 id="systemAppsTitle" class="list-title">Annet</h3>
     <ul id="systemApps" class="app-list"></ul>
+  </dialog>
+
+  <dialog id="pairDialog" class="sheet" aria-labelledby="pairTitle">
+    <form id="pairForm" method="dialog" novalidate>
+      <div class="sheet-head">
+        <h2 id="pairTitle">Skriv inn koden</h2>
+        <button class="icon-button" type="button" data-close="pairDialog" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+      </div>
+      <label class="field-label" for="pairCode">Koden på TV-skjermen</label>
+      <input id="pairCode" class="field large mono code" maxlength="6" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="A1B2C3" aria-describedby="pairHint">
+      <p id="pairHint" class="hint">Seks tegn, tall og bokstavene A–F. Koden vises på TV-en så lenge paringen pågår.</p>
+      <p id="pairError" class="hint error" role="alert" hidden></p>
+      <button id="pairSubmit" type="submit" class="button primary">Par</button>
+    </form>
   </dialog>
 
   <dialog id="renameDialog" class="sheet" aria-labelledby="renameTitle">
@@ -332,13 +351,14 @@
         <div class="yt-recent-head"><h2>Siste søk</h2><button id="ytRecentClear" type="button" class="link-button">Tøm</button></div>
         <div id="ytRecent" class="chips"></div>
       </div>
+      <ul id="ytSuggest" class="yt-suggest" aria-label="Forslag" hidden></ul>
       <p id="ytStatus" class="hint" role="status" aria-live="polite"></p>
       <ul id="ytResults" class="yt-list" aria-label="Resultater"></ul>
     </div>
     <div id="nowYt" class="nowbar floating" hidden></div>
   </section>
 
-  <div id="toast" class="toast" role="alert"></div>
+  <div id="toast" class="toast" role="alert" popover="manual"></div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
 import {
-  addRecent, BRIDGE_DOWN, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
+  addRecent, BRIDGE_DOWN, bundledIcon, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
   normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, typeLabel,
 } from './logic.js';
 
@@ -120,12 +120,40 @@ function svgIcon(name) {
 }
 
 let toastTimer;
-function toast(message) {
+// Varsel nederst. Med handling (for eksempel «Prøv en annen måte») får det en knapp og står lenger.
+function toast(message, action = null) {
   const el = $('#toast');
-  el.textContent = message;
-  el.classList.add('show');
+  const text = document.createElement('span');
+  text.textContent = message;
+  el.replaceChildren(text);
+  el.classList.toggle('has-action', Boolean(action));
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'toast-action';
+    button.textContent = action.label;
+    button.addEventListener('click', () => {
+      hideToast();
+      action.run();
+    });
+    el.append(button);
+  }
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+  // Åpne ark ligger i nettleserens øverste lag. Meldingen legges der på nytt hver gang, så den havner over dem.
+  if (el.showPopover) {
+    try {
+      if (el.matches(':popover-open')) el.hidePopover();
+      el.showPopover();
+    } catch { /* popover støttes ikke: vises som før */ }
+  }
+  requestAnimationFrame(() => el.classList.add('show'));
+  toastTimer = setTimeout(hideToast, action ? 7000 : 3200);
+}
+function hideToast() {
+  const el = $('#toast');
+  clearTimeout(toastTimer);
+  el.classList.remove('show');
+  toastTimer = setTimeout(() => { try { el.hidePopover?.(); } catch { /* allerede skjult */ } }, 200);
 }
 
 function haptic(pattern = 10) {
@@ -225,7 +253,7 @@ function render() {
   $('#deviceMeta').hidden = !device;
   $('#deviceMeta').textContent = device ? typeLabel(device.type) : '';
   $('#deviceButton').setAttribute('aria-label', device ? `${name}, ${typeLabel(device.type)} på ${device.host}. Bytt TV` : 'Velg TV');
-  $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code ? 'err' : 'busy') : 'off';
+  $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code && state.code !== 'needs-code' ? 'err' : 'busy') : 'off';
 
   const notice = noticeFor(state);
   $('#notice').hidden = !notice.text;
@@ -246,6 +274,27 @@ function render() {
 
   renderApps();
   announce();
+  promptPairing();
+}
+
+// Android TV: når boksen viser paringskoden, åpnes kodevinduet av seg selv (én gang per paring).
+let pairPrompted = false;
+function promptPairing() {
+  const waiting = state.code === 'needs-code' && state.device?.type === 'androidtv';
+  if (!waiting) {
+    pairPrompted = false;
+    return;
+  }
+  if (pairPrompted || document.querySelector('dialog[open]')) return;
+  pairPrompted = true;
+  openPair();
+}
+
+function openPair() {
+  $('#pairCode').value = '';
+  $('#pairError').hidden = true;
+  $('#pairDialog').showModal();
+  $('#pairCode').focus();
 }
 
 // Favoritter lagres per TV i brukerens rekkefølge.
@@ -259,7 +308,8 @@ function saveFavorites(ids) {
   storage.write('fjern-favorites', all);
 }
 
-// Ikonet hentes fra TV-en via broen. Til det er lastet (eller hvis det mangler) vises forbokstaver.
+// Ikonet hentes fra TV-en via broen, eller følger med appen (Android TV). Til det er lastet
+// (eller hvis det mangler) vises forbokstaver.
 function appIcon(app, size = 'm') {
   const box = document.createElement('span');
   box.className = `app-icon ${size}`;
@@ -270,7 +320,7 @@ function appIcon(app, size = 'm') {
   img.alt = '';
   img.loading = 'lazy';
   img.decoding = 'async';
-  img.src = `/api/icon/${encodeURIComponent(app.id)}?tv=${encodeURIComponent(state.device?.host || '')}`;
+  img.src = bundledIcon(app) || `/api/icon/${encodeURIComponent(app.id)}?tv=${encodeURIComponent(state.device?.host || '')}`;
   img.addEventListener('load', () => box.classList.add('has-image'));
   img.addEventListener('error', () => img.remove());
   box.append(img);
@@ -520,11 +570,15 @@ async function send(key, button, { requireReady = true } = {}) {
   }
 }
 
-async function launch(app, button) {
+async function launch(app, button, { retry = false } = {}) {
   haptic();
   try {
-    await api('launch', { id: app.id });
+    const result = await api('launch', retry ? { id: app.id, retry: true } : { id: app.id });
     flash(button, 'is-sent', 200);
+    // Android TV-bokser som ikke melder hvilken app som er åpen: brukeren kan be om neste måte å åpne den på.
+    if (result?.verified === false && result.canRetry) {
+      toast(`Åpnet ikke ${app.name} seg?`, { label: 'Prøv en annen måte', run: () => launch(app, button, { retry: true }) });
+    }
     if (state.nowPlaying) {
       state.nowPlaying = null;
       renderNowPlaying();
@@ -616,7 +670,9 @@ function openPower() {
       ? 'Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på via Wi‑Fi» er aktivert på TV-en.'
       : type === 'samsung'
         ? 'Slå på krever at TV-en har vært tilkoblet én gang, og at «Slå på med mobil» er aktivert (Innstillinger → Generelt → Nettverk → Ekspertinnstillinger).'
-        : 'Denne Roku-enheten kan ikke slås på via nettverket.');
+        : type === 'androidtv'
+          ? 'Android TV kan bare slås på mens appen er koblet til den. Bruk fjernkontrollen eller TV-en.'
+          : 'Denne Roku-enheten kan ikke slås på via nettverket.');
   }
   hints.push('TV-en kan ikke alltid slås på igjen via nettverket etter at den er slått av.');
   $('#powerHint').textContent = hints.join(' ');
@@ -635,8 +691,46 @@ $$('[data-close]').forEach((el) => el.addEventListener('click', () => closeSheet
 
 $('#noticeAction').addEventListener('click', (event) => {
   if (!state.device) return;
-  if (event.currentTarget.dataset.action === 'repair') connect(state.device, { route: 'repair' });
+  const action = event.currentTarget.dataset.action;
+  if (action === 'pair') openPair();
+  else if (action === 'repair') connect(state.device, { route: 'repair' });
   else connect(state.device);
+});
+
+$('#pairCode').addEventListener('input', (event) => {
+  // Koden er heksadesimal: store bokstaver, bare 0–9 og A–F.
+  const input = event.currentTarget;
+  input.value = input.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 6);
+  $('#pairError').hidden = true;
+});
+// Feil vises rett under feltet, der brukeren ser.
+function pairError(message) {
+  $('#pairError').textContent = message;
+  $('#pairError').hidden = false;
+}
+$('#pairForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const code = $('#pairCode').value.trim();
+  if (code.length !== 6) {
+    pairError('Koden er seks tegn, slik den vises på TV-en.');
+    $('#pairCode').focus();
+    return;
+  }
+  const button = $('#pairSubmit');
+  button.disabled = true;
+  button.textContent = 'Sjekker koden …';
+  try {
+    applyStatus(await api('pair', { code }));
+    closeSheet($('#pairDialog'));
+    toast('Paret. Kobler til …');
+  } catch (error) {
+    pairError(error.message);
+    $('#pairCode').select();
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Par';
+    render();
+  }
 });
 
 $('#diagOpen').addEventListener('click', async () => {
@@ -817,25 +911,107 @@ async function playVideo(video, button) {
   }
 }
 
+// Søket går mens brukeren skriver: forslag til søkeord etter en kort pause, og treff litt etter.
+// Enter, et forslag eller talesøk gir et «fullt» søk som lagres i siste søk og skjuler tastaturet.
+const LIVE_MIN_CHARS = 2;
+const SUGGEST_DELAY = 200;
+const LIVE_DELAY = 550;
+const resultCache = new Map();
 let searchToken = 0;
-async function runSearch(query) {
+let suggestToken = 0;
+let suggestTimer = 0;
+let liveTimer = 0;
+
+function cacheResults(q, videos) {
+  resultCache.delete(q);
+  resultCache.set(q, videos);
+  if (resultCache.size > 30) resultCache.delete(resultCache.keys().next().value);
+}
+
+function hideSuggestions() {
+  suggestToken += 1;
+  clearTimeout(suggestTimer);
+  $('#ytSuggest').hidden = true;
+  $('#ytSuggest').replaceChildren();
+}
+
+function renderSuggestions(list) {
+  $('#ytSuggest').hidden = list.length === 0;
+  $('#ytSuggest').replaceChildren(...list.map((text) => {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'yt-suggestion';
+    button.setAttribute('aria-label', `Søk etter ${text}`);
+    const label = document.createElement('span');
+    label.textContent = text;
+    button.append(svgIcon('search'), label);
+    button.addEventListener('click', () => {
+      $('#ytQuery').value = text;
+      runSearch(text);
+    });
+    li.append(button);
+    return li;
+  }));
+}
+
+async function loadSuggestions(q) {
+  const token = ++suggestToken;
+  try {
+    const { suggestions } = await api('ytsuggest', { query: q });
+    if (token === suggestToken && $('#ytQuery').value.trim() === q) renderSuggestions((suggestions || []).slice(0, 4));
+  } catch {
+    // forslag er en bonus; ved feil vises bare ingen
+  }
+}
+
+async function runSearch(query, { live = false } = {}) {
   const q = query.trim();
   if (!q) return;
   const token = ++searchToken;
-  $('#ytQuery').blur(); // skjul mobiltastaturet så resultatene synes
-  rememberSearch(q);
-  $('#ytResults').replaceChildren();
+  clearTimeout(liveTimer);
+  if (!live) {
+    hideSuggestions();
+    $('#ytQuery').blur(); // skjul mobiltastaturet så resultatene synes
+    rememberSearch(q);
+  }
   $('#ytRecentBox').hidden = true;
-  $('#ytStatus').textContent = `Søker etter «${q}» …`;
-  try {
-    const { videos } = await api('ytsearch', { query: q });
-    if (token !== searchToken) return;
+  const show = (videos) => {
     $('#ytStatus').textContent = videos.length ? '' : `Ingen treff for «${q}».`;
     $('#ytResults').replaceChildren(...videos.map(videoRow));
     $('.ytview-body').scrollTop = 0;
+  };
+  const cached = resultCache.get(q);
+  if (cached) return show(cached);
+  // Mens brukeren skriver, står forrige treff til de nye kommer (ingen blinking).
+  if (!live || !$('#ytResults').children.length) {
+    $('#ytResults').replaceChildren();
+    $('#ytStatus').textContent = `Søker etter «${q}» …`;
+  }
+  try {
+    const { videos } = await api('ytsearch', { query: q });
+    cacheResults(q, videos);
+    if (token === searchToken) show(videos);
   } catch (error) {
     if (token === searchToken) $('#ytStatus').textContent = error.message;
   }
+}
+
+function onQueryInput() {
+  const q = $('#ytQuery').value.trim();
+  clearTimeout(suggestTimer);
+  clearTimeout(liveTimer);
+  if (!q) {
+    searchToken += 1;
+    hideSuggestions();
+    $('#ytResults').replaceChildren();
+    $('#ytStatus').textContent = '';
+    renderRecent();
+    return;
+  }
+  if (q.length < LIVE_MIN_CHARS) return;
+  suggestTimer = setTimeout(() => loadSuggestions(q), SUGGEST_DELAY);
+  liveTimer = setTimeout(() => runSearch(q, { live: true }), LIVE_DELAY);
 }
 
 // «Spilles nå»: liten linje med det som går på TV-en, både på forsiden og i YouTube-visningen.
@@ -943,13 +1119,7 @@ $('#ytForm').addEventListener('submit', (event) => {
   event.preventDefault();
   runSearch($('#ytQuery').value);
 });
-$('#ytQuery').addEventListener('input', () => {
-  if (!$('#ytQuery').value) {
-    $('#ytResults').replaceChildren();
-    $('#ytStatus').textContent = '';
-    renderRecent();
-  }
-});
+$('#ytQuery').addEventListener('input', onQueryInput);
 $('#ytRecentClear').addEventListener('click', () => {
   storage.write(RECENT_KEY, []);
   renderRecent();

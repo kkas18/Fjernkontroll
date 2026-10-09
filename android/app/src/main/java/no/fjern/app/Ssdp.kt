@@ -37,31 +37,40 @@ class Ssdp(private val wifi: WifiManager?) {
         fun devices(): List<Device> = found.values.toList()
     }
 
+    /** SSDP og mDNS (Android TV) samtidig, med felles tak på antall enheter. */
     fun search(waitMs: Long = 4500): List<Device> {
         val lock = wifi?.createMulticastLock("fjern-ssdp")?.apply { setReferenceCounted(false); acquire() }
-        val collector = Collector()
         try {
-            DatagramSocket().use { socket ->
-                socket.soTimeout = 250
-                val group = InetAddress.getByName(MULTICAST)
-                for (target in TARGETS) {
-                    val packet = "M-SEARCH * HTTP/1.1\r\nHOST: $MULTICAST:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: $target\r\n\r\n".toByteArray()
-                    runCatching { socket.send(DatagramPacket(packet, packet.size, group, 1900)) }
-                }
-                val deadline = System.currentTimeMillis() + waitMs
-                val buffer = ByteArray(2048)
-                while (System.currentTimeMillis() < deadline) {
-                    val incoming = DatagramPacket(buffer, buffer.size)
-                    try {
-                        socket.receive(incoming)
-                        collector.add(String(incoming.data, 0, incoming.length, Charsets.UTF_8), incoming.address.hostAddress ?: continue)
-                    } catch (_: SocketTimeoutException) {
-                        // fortsett til fristen går ut
-                    }
-                }
+            val mdns = java.util.concurrent.Executors.newSingleThreadExecutor().let { executor ->
+                executor.submit<List<Device>> { runCatching { Mdns.search(minOf(waitMs, 3000)) }.getOrDefault(emptyList()) }.also { executor.shutdown() }
             }
+            val ssdp = searchSsdp(waitMs)
+            return (ssdp + mdns.get()).take(MAX_DEVICES)
         } finally {
             lock?.release()
+        }
+    }
+
+    private fun searchSsdp(waitMs: Long): List<Device> {
+        val collector = Collector()
+        DatagramSocket().use { socket ->
+            socket.soTimeout = 250
+            val group = InetAddress.getByName(MULTICAST)
+            for (target in TARGETS) {
+                val packet = "M-SEARCH * HTTP/1.1\r\nHOST: $MULTICAST:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: $target\r\n\r\n".toByteArray()
+                runCatching { socket.send(DatagramPacket(packet, packet.size, group, 1900)) }
+            }
+            val deadline = System.currentTimeMillis() + waitMs
+            val buffer = ByteArray(2048)
+            while (System.currentTimeMillis() < deadline) {
+                val incoming = DatagramPacket(buffer, buffer.size)
+                try {
+                    socket.receive(incoming)
+                    collector.add(String(incoming.data, 0, incoming.length, Charsets.UTF_8), incoming.address.hostAddress ?: continue)
+                } catch (_: SocketTimeoutException) {
+                    // fortsett til fristen går ut
+                }
+            }
         }
         return collector.devices()
     }
