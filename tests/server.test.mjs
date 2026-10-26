@@ -298,6 +298,18 @@ test('Android TV: kode fra skjermen pares via /api/pair, deretter vanlige komman
   assert.equal((await post('/api/pair', { code: 'A1B2C3' })).status, 409, 'koder er bare for Android TV');
 });
 
+test('fjernes TV-en som er i bruk, kobler broen fra og glemmer valget', async () => {
+  await post('/api/connect', { device: { type: 'samsung', host: '192.168.1.50' } });
+  assert.equal((await request('/api/status')).json.device.host, '192.168.1.50');
+  const before = fakeSamsung.disconnects;
+  const answer = await post('/api/disconnect', {});
+  assert.equal(answer.status, 200);
+  assert.deepEqual([answer.json.device, answer.json.ready], [null, false]);
+  assert.equal(fakeSamsung.disconnects, before + 1, 'Samsung-økten er koblet fra');
+  assert.equal((await request('/api/status')).json.device, null, 'TV-en kommer ikke tilbake ved neste statusoppdatering');
+  assert.equal((await post('/api/command', { key: 'Home' })).status, 409, 'ingen TV valgt');
+});
+
 test('ny paring er ikke for Roku', async () => {
   await post('/api/connect', { device: { type: 'roku', host: '192.168.1.5' } });
   assert.equal((await post('/api/repair')).status, 409);

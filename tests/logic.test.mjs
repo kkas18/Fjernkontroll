@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { addRecent, MAX_RECENT, BRIDGE_DOWN, DEFAULT_NAMES, brandFor, bundledIcon, defaultFavorites, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode, typeLabel } from '../public/logic.js';
+import { addRecent, MAX_RECENT, BRIDGE_DOWN, DEFAULT_NAMES, brandFor, bundledIcon, defaultFavorites, displayName, fallbackColor, favoriteApps, favoriteSlots, initials, isFavoriteListFull, isPrivateIPv4, isSystemApp, isValidDevice, MAX_FAVORITES, newDevices, normalizeName, noticeFor, rememberDevice, sortApps, toggleFavorite, transportMode, typeLabel } from '../public/logic.js';
 import { isPrivateIPv4 as serverIsPrivate } from '../lib/validate.mjs';
 import { ANDROIDTV_APPS } from '../lib/androidtv.mjs';
 
@@ -72,6 +72,20 @@ test('favoritter: brukerens valg, rekkefølge og tak', () => {
   let many = [];
   for (const app of TV_APPS) many = toggleFavorite(TV_APPS, many, app.id);
   assert.equal(many.length, MAX_FAVORITES);
+});
+
+test('favoritter: alltid én rad på forsiden (4 på vanlige Galaxy, 5 på brede), med tydelig «full»', () => {
+  assert.equal(favoriteSlots(360), 4);
+  assert.equal(favoriteSlots(384), 4);
+  assert.equal(favoriteSlots(412), 5);
+  assert.equal(MAX_FAVORITES, 5);
+  // Brukerens skjermbilde: seks favoritter ga to rader og overlapping. Nå vises bare det som får plass.
+  const six = ['a4', 'a3', 'a5', 'a1', 'a14', 'a13'];
+  assert.deepEqual(favoriteApps(TV_APPS, six, 4).map((a) => a.id), ['a4', 'a3', 'a5', 'a1']);
+  assert.equal(isFavoriteListFull(TV_APPS, six, 4), true);
+  assert.deepEqual(toggleFavorite(TV_APPS, six, 'a2', 4), ['a4', 'a3', 'a5', 'a1'], 'full rad: ingen ny, og overskuddet ryddes');
+  assert.deepEqual(toggleFavorite(TV_APPS, six, 'a3', 4), ['a4', 'a5', 'a1'], 'fjerne virker alltid');
+  assert.equal(isFavoriteListFull(TV_APPS, ['a4'], 4), false);
 });
 
 test('systemapper sorteres nederst', () => {

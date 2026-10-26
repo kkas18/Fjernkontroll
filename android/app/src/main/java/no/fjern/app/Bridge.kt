@@ -28,7 +28,7 @@ class Bridge(
         /** Alle ruter grensesnittet kan kalle. NativeBridge slipper bare disse gjennom (testet mot public/app.js). */
         val ROUTES = setOf(
             "status", "scan", "connect", "repair", "pair", "apps", "launch", "command", "text", "diagnostics",
-            "inputs", "input", "ytsearch", "ytsuggest", "ytplay",
+            "inputs", "input", "ytsearch", "ytsuggest", "ytplay", "disconnect",
         )
     }
 
@@ -271,6 +271,13 @@ class Bridge(
                         lg.connect(device.host)
                     }
                 }
+                status()
+            }
+            "disconnect" -> {
+                // Brukeren har fjernet TV-en som var i bruk: koble fra alt og glem valget.
+                disconnectOthers("")
+                selected = null
+                rokuApps = emptyList()
                 status()
             }
             "repair" -> {

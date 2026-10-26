@@ -67,6 +67,7 @@
   </svg>
 
   <div class="app">
+    <!-- Toppen tar all ledig høyde: stor tittel på høye skjermer, kompakt linje på lave (se CSS). -->
     <header class="bar">
       <button id="deviceButton" class="device" type="button" aria-haspopup="dialog" aria-controls="devicesSheet">
         <span id="led" class="led" aria-hidden="true"></span>
@@ -89,7 +90,6 @@
         <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span>Søk på YouTube</span>
         <span id="searchPillMic" class="search-pill-mic" hidden><svg class="icon" aria-hidden="true"><use href="#i-mic"/></svg></span>
       </button>
-      <div id="homeRecent" class="home-recent" role="group" aria-label="Siste søk på YouTube" hidden></div>
       <div id="nowHome" class="nowbar" hidden></div>
     </div>
 
@@ -139,13 +139,13 @@
       <nav class="dock" aria-label="Snarveier">
         <button id="inputOpen" class="tool" type="button" data-cap="inputs"><svg class="icon" aria-hidden="true"><use href="#i-input"/></svg><span>Kilde</span></button>
         <button id="numOpen" class="tool" type="button" data-cap="Num1"><svg class="icon" aria-hidden="true"><use href="#i-numpad"/></svg><span>123</span></button>
-        <button class="tool" type="button" data-key="Settings" data-cap="Settings"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>Oppsett</span></button>
+        <button class="tool" type="button" data-key="Settings" data-cap="Settings" aria-label="TV-ens innstillinger"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span>Innstillinger</span></button>
         <button id="moreOpen" class="tool" type="button"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span>Mer</span></button>
       </nav>
     </main>
 
     <section id="empty" class="empty" aria-labelledby="emptyTitle" hidden>
-      <h1 id="emptyTitle">Ingen TV valgt</h1>
+      <h1 id="emptyTitle" class="sr-only">Ingen TV valgt</h1>
       <p>Telefonen og TV-en må være på samme Wi‑Fi.</p>
       <div class="stack">
         <button id="emptyScan" class="button primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>Søk etter TV</button>
@@ -236,7 +236,10 @@
       <h2 id="appsSheetTitle">Alle apper</h2>
       <button class="icon-button" type="button" data-close="appsSheet" aria-label="Lukk"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
-    <p class="hint">Trykk på en app for å åpne den. Trykk på stjernen for å legge den til eller fjerne den fra favorittene.</p>
+    <p class="hint">Trykk på en app for å åpne den. Stjernen legger appen på forsiden.</p>
+    <h3 id="favAppsTitle" class="list-title">På forsiden</h3>
+    <ul id="favApps" class="app-list"></ul>
+    <h3 id="allAppsTitle" class="list-title">Andre apper</h3>
     <ul id="allApps" class="app-list"></ul>
     <h3 id="systemAppsTitle" class="list-title">Annet</h3>
     <ul id="systemApps" class="app-list"></ul>

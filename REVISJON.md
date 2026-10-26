@@ -520,3 +520,66 @@ Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og an
 - «Mer», talltastene og YouTube er sjekket med de nye fargene.
 - `npm run verify` 134/134 og Kotlin 38/38.
 - Ende-til-ende-testen mot den falske boksen besto med det nye oppsettet: taster, apper, «Prøv en annen måte» og YouTube.
+
+## Runde 12: full revisjon av design og funksjoner (2.12.0)
+**Brukerens tilbakemelding (skjermbilde):** App-ikonene lå oppå søkefeltet og «Siste søk». Designet og funksjonene var ikke helt optimale.
+
+**Metode:**
+- Skjermbildet ble gjenskapt, og overlapping ble målt i 30 kombinasjoner av TV-type, Galaxy-størrelse og tilstand.
+- Koden i grensesnittet ble gjennomgått.
+- Skår før: **6/10**.
+
+### Funn
+| # | Funn | Alvor |
+|---|---|---|
+| 1 | Med flere enn 4 favoritter gikk appene over to rader. Størrelsen på styrekorset ble regnet ut fra en fast antakelse om resten av siden (`100dvh − 488px`), så innholdet ble skjøvet opp over søkefeltet og «Siste søk». Det gjaldt 16 av 20 tilfeller med 6 favoritter, for alle TV-typer. | Alvorlig |
+| 2 | App-ikonene ble bygd på nytt ved hver statusoppdatering (hvert 2,5 s): 9 nye ikonforespørsler på 6 s med 3 apper. Et trykk som falt sammen med en oppdatering gikk tapt. | Alvorlig |
+| 3 | «Siste søk» sto både på forsiden og i YouTube-visningen, og tok plass. | Design |
+| 4 | Tomrom øverst på høye telefoner. | Design |
+| 5 | Appraden forsvant ved frakobling, så oppsettet hoppet. | Design |
+| 6 | Avspillingsknappene hadde ulik form. | Design |
+| 7 | «Oppsett» var uklart, fordi knappen åpner TV-ens innstillinger. | Design |
+| 8 | Favoritter: inntil 9 kunne stjernes, men det var plass til én rad. Det kom ingen beskjed når raden var full, og favorittene sto ikke øverst. | Funksjon |
+| 9 | Ingen «Åpner …»-tilstand mens Android TV prøver lenker. Det inviterte til dobbelttrykk. | Funksjon |
+| 10 | Fjernet man TV-en som var i bruk, ble den stående som valgt, og den kom tilbake ved neste statusoppdatering. | Funksjon |
+
+### Utbedring
+1. **Oppsett etter faktisk plass:**
+   - Styrekorset er en container med fleksibel høyde (maks 280 px, minst 132 px), og er det eneste som krymper.
+   - Kortet kan krympe (`min-height: 0`). Bruker resten av siden mer plass, blir styrekorset mindre i stedet for at noe overlapper.
+2. **Én favorittrad:** 4 favoritter og «Alle apper» under 400 px bredde, 5 favoritter over. Taket gjelder også stjernemarkering (`favoriteSlots`, `isFavoriteListFull`), og overskudd ryddes bort.
+3. **Stabile ikoner:** Appraden tegnes bare på nytt når innholdet endres. Det gjelder TV, antall plasser og favoritter (`appsKey`).
+4. **Ryddigere forside:** «Siste søk» står bare i YouTube-visningen.
+5. **Stor tittel i toppen** (One UI): Toppen tar all ledig høyde. Er den minst 128 px høy, blir TV-navnet en tittel på 30 px med «type · status» under. Ellers er den en kompakt linje.
+6. **Frakoblet:**
+   - Appraden står nedtonet.
+   - Et trykk gir beskjed og sender ingenting.
+   - Kobler appen til samme TV på nytt, beholdes appene.
+7. **Like avspillingsknapper:** tre like knapper, med ⏯ i aksentfarge.
+8. **«Oppsett» heter nå «Innstillinger».** Knappen har skjermlesernavnet «TV-ens innstillinger».
+9. **«Åpner …»:** Etter 300 ms viser flisen en ring og «Åpner …». Det går bare én åpning per app om gangen, og trykk mens TV-en er frakoblet sender ingenting.
+10. **«Alle apper»:** Delen «På forsiden (n av N)» står øverst, deretter «Andre apper» og systemapper. Er raden full, kommer beskjeden «Forsiden har plass til N favoritter. Fjern en først.»
+11. **Fjerne TV-en som er i bruk:**
+    - Ny rute `disconnect` i Node og Kotlin, og den står i `Bridge.ROUTES`.
+    - Statusoppdateringer venter til broen har koblet fra.
+12. **Tomtilstand:** Tittelen står bare én gang, og strømknappen er skjult når ingen TV er valgt.
+
+### Ny grensesnittest i CI (`npm run check:ui`)
+`scripts/ui-check.mjs` kjører grensesnittet i ekte Chrome mot en falsk bro, med 87 sjekker:
+- **Oppsett:** 4 TV-typer × 6 størrelser (320×568 til 412×915) × 3 tilstander (enkel, full med 9 favoritter og «Spilles nå», frakoblet). Den sjekker at ingenting overlapper eller havner utenfor skjermen, at siden ikke ruller, at knappene er minst 40 px, at styrekorset er minst 120 px, og at favorittene står på én rad.
+- **Funksjoner:**
+  - app-ikonene står fast mellom statusoppdateringer
+  - favorittraden har tak og gir beskjed
+  - flisen viser «Åpner …», og dobbelttrykk gir bare én åpning
+  - frakoblet tilstand
+  - fjerning av TV-en som er i bruk
+- **Kontroll av testen:** Mot forrige versjon feilet 37 av 73 oppsettsjekker, blant annet fordi søkefeltet ikke kunne trykkes på. Mot denne versjonen består alle 87.
+- **I CI:** Testen kjører som egen jobb med `playwright-core` og runnerens Chrome. Appen har fortsatt ingen npm-avhengigheter.
+
+### Verifisert
+- `npm run verify`: **136/136**. Det inkluderer nye tester for favorittraden og for broens `disconnect`.
+- Kotlin: **38/38**, med `disconnect` i rutelisten (testen sjekker `public/app.js`).
+- `npm run check:ui`: **87/87**.
+- Ende-til-ende med den ekte Node-broen og en falsk Android TV-boks over TLS: tilkobling, taster, TV 2 Play med «Prøv en annen måte», ny tilkobling og YouTube. Alt besto, uten JS-feil.
+
+Skår etter: **8,5/10**. Det som gjenstår er å teste mot ekte TV-er og bokser.
