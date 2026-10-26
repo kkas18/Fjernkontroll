@@ -54,7 +54,10 @@ const STREAMING = /netflix|youtube|nrk|tv ?2|telia|disney|\bmax\b|hbo|viaplay|pr
 // LG merker ikke alltid systemapper; disse navnene sorteres likevel nederst.
 const SYSTEM_NAMES = /developer|kamera|camera|hjemmehubb|home ?hub|nettleser|browser|mediespiller|media ?player|^apps$|innstillinger|settings|gallery|alexa|brukerveiledning|user guide|lg channels|live tv|sport/i;
 
-export const MAX_FAVORITES = 9;
+// Favorittene står på én rad på forsiden, sammen med «Alle apper»: 4 på vanlige telefoner, 5 på brede (≥ 400 px).
+// Flere favoritter enn det får ikke plass, så det er også grensen for å stjerne en app.
+export const MAX_FAVORITES = 5;
+export const favoriteSlots = (width) => (width >= 400 ? 5 : 4);
 
 export const isSystemApp = (app) => Boolean(app.system) || SYSTEM_NAMES.test(app.name);
 
@@ -71,18 +74,21 @@ export function defaultFavorites(apps, max = 4) {
 }
 
 // Lagrede favoritter i brukerens rekkefølge, bare apper som fortsatt finnes på TV-en.
-export function favoriteApps(apps, stored) {
+export function favoriteApps(apps, stored, max = MAX_FAVORITES) {
   const ids = Array.isArray(stored) ? stored : defaultFavorites(apps);
-  return ids.map((id) => apps.find((app) => app.id === id)).filter(Boolean).slice(0, MAX_FAVORITES);
+  return ids.map((id) => apps.find((app) => app.id === id)).filter(Boolean).slice(0, max);
 }
 
-export function toggleFavorite(apps, stored, id) {
-  const current = Array.isArray(stored) ? stored.slice() : defaultFavorites(apps);
+// Legger til eller fjerner en favoritt. Er raden full, er svaret uendret (sjekk med isFavoriteListFull først).
+// Lagrede favoritter som ikke lenger får plass eller er borte fra TV-en, ryddes bort samtidig.
+export function toggleFavorite(apps, stored, id, max = MAX_FAVORITES) {
+  const current = favoriteApps(apps, stored, max).map((app) => app.id);
   const index = current.indexOf(id);
   if (index >= 0) current.splice(index, 1);
-  else if (current.length < MAX_FAVORITES) current.push(id);
+  else if (current.length < max) current.push(id);
   return current;
 }
+export const isFavoriteListFull = (apps, stored, max = MAX_FAVORITES) => favoriteApps(apps, stored, max).length >= max;
 
 // Kjente apper får merkefarge og kortnavn i reserveikonet. Fargene er mørk nok til hvit tekst (minst 4,5:1).
 const BRANDS = [

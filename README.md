@@ -37,7 +37,7 @@ Oppdater med `cd ~/fjern && git pull`.
 ## Funksjoner
 
 - Navigasjon, OK, Hjem, Tilbake, volum, kanal (skjules på Roku-spillere uten TV), lyd av og avspilling. Hold inne piler og volum for å gjenta.
-- **Apper:** snarveier til appene på TV-en, hentet direkte fra TV-en.
+- **Apper:** snarveier til appene på TV-en, hentet direkte fra TV-en. Favorittene står på én rad på forsiden: 4 på vanlige telefoner og 5 på brede, i tillegg til «Alle apper». I «Alle apper» velger du dem med stjernen. Der står favorittene øverst med teller, og du får beskjed når raden er full. Mens en app startes, viser flisen «Åpner …».
 - **Slå på og av:** Roku-TV-er slås på med `PowerOn`. LG slås på med Wake-on-LAN når TV-en har vært tilkoblet én gang og **Slå på via Wi‑Fi** er aktivert på TV-en (ofte under *Mobil TV på*; plasseringen varierer per modell).
 - **YouTube:** trykk på «Søk på YouTube» øverst (eller 🎤 for talesøk), og se resultatene med bilder på mobilen. Treffene og forslag til søkeord kommer mens du skriver, uten å trykke Søk. Trykk på en video, så spilles den på TV-en, og «Spilles nå» viser hva som går. Søket leser YouTubes offentlige søkeside gjennom broen, og forslagene kommer fra Googles forslagstjeneste. Ingen konto eller API-nøkkel trengs. Talesøk bruker telefonens egen talegjenkjenning i Android-appen, og Chromes i nettversjonen.
 - **Skriv på TV** (under **Mer**): skriv i tekstfeltet som er åpent på TV-en, for eksempel et passord, og slett tegn eller trykk Enter.
@@ -96,7 +96,12 @@ Grensesnittet bruker [Manrope](https://github.com/sharanda/manrope), som ligger 
 npm start        # start broen på http://localhost:8765
 npm test         # tester med node:test
 npm run verify   # syntakssjekk + tester (kjøres også i CI)
+npm run check:ui # grensesnittest i ekte nettleser (krever playwright-core og Chrome; kjøres i CI)
 ```
+
+`npm run check:ui` (`scripts/ui-check.mjs`) kjører grensesnittet mot en falsk bro. Den sjekker forsiden for alle TV-typer, seks telefonstørrelser (fra 320×568 til 412×915) og tre tilstander: enkel, full (9 favoritter og «Spilles nå») og frakoblet.
+- **Oppsett:** ingen overlapping, ingen rulling og ingenting utenfor skjermen. Alle knapper er minst 40 px, og favorittene står på én rad.
+- **Funksjoner:** app-ikonene står fast mellom statusoppdateringer, favorittraden har tak, flisen viser «Åpner …», og appraden blir stående nedtonet ved frakobling. Fjerner du TV-en som er i bruk, kobles den fra.
 
 | Mappe | Innhold |
 | --- | --- |

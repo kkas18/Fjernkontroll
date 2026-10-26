@@ -278,6 +278,13 @@ export function createBridge({
         }
         return sendJson(res, 200, await status());
       }
+      case '/api/disconnect': {
+        // Brukeren har fjernet TV-en som var i bruk: koble fra alt og glem valget.
+        disconnectOthers(null);
+        selected = null;
+        rokuAppList = [];
+        return sendJson(res, 200, await status());
+      }
       case '/api/repair': {
         // «Par på nytt» etter endret sertifikat: glem lagret nøkkel/token og avtrykk, og koble til.
         const tv = tvSession();

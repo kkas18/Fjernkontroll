@@ -23,6 +23,20 @@ jobs:
       - name: Syntakssjekk og tester
         run: npm run verify
 
+  # Oppsettet i ekte nettleser: ingen overlapping, rulling eller knapper utenfor skjermen og funksjonene i grensesnittet (scripts/ui-check.mjs).
+  # playwright-core installeres bare her (appen har fortsatt ingen npm-avhengigheter) og bruker runnerens Chrome.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Grensesnittsjekk
+        run: |
+          npm install --no-save --no-package-lock playwright-core@1.56.1
+          CHROME_PATH="$(command -v google-chrome)" npm run check:ui
+
   android:
     runs-on: ubuntu-latest
     env:

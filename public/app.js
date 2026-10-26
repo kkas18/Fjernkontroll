@@ -1,6 +1,6 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
 import {
-  addRecent, BRIDGE_DOWN, bundledIcon, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, initials, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
+  addRecent, BRIDGE_DOWN, bundledIcon, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, favoriteSlots, initials, isFavoriteListFull, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
   normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, typeLabel,
 } from './logic.js';
 
@@ -248,10 +248,10 @@ function announce() {
 
 function render() {
   const { device, ready, bridge, capabilities } = state;
-  const name = device ? displayName(device, state.saved) : 'Ingen TV';
+  const name = device ? displayName(device, state.saved) : 'Ingen TV valgt';
   $('#deviceName').textContent = name;
   $('#deviceMeta').hidden = !device;
-  $('#deviceMeta').textContent = device ? typeLabel(device.type) : '';
+  $('#deviceMeta').textContent = device ? `${typeLabel(device.type)} · ${statusWord()}` : '';
   $('#deviceButton').setAttribute('aria-label', device ? `${name}, ${typeLabel(device.type)} på ${device.host}. Bytt TV` : 'Velg TV');
   $('#led').dataset.state = !bridge ? 'err' : ready ? 'ok' : device ? (state.code && state.code !== 'needs-code' ? 'err' : 'busy') : 'off';
 
@@ -266,7 +266,7 @@ function render() {
   $('#remote').hidden = !device;
   $('#homeTop').hidden = !device || capabilities?.search !== 'youtube';
   $('#empty').hidden = Boolean(device);
-  $('#powerOpen').disabled = !device;
+  $('#powerOpen').hidden = !device; // uten TV er det ingenting å slå av eller på
   $('#textOpen').disabled = !device;
 
   $('#channelRocker').classList.toggle('is-unused', capabilities?.channels === false);
@@ -275,6 +275,15 @@ function render() {
   renderApps();
   announce();
   promptPairing();
+}
+
+// Kort status under TV-navnet. Detaljer og handlinger står i merknaden under toppen.
+function statusWord() {
+  if (!state.bridge) return 'Broen svarer ikke';
+  if (state.ready) return 'Tilkoblet';
+  if (state.connecting) return 'Kobler til …';
+  if (state.code === 'needs-code') return 'Venter på kode';
+  return 'Ikke tilkoblet';
 }
 
 // Android TV: når boksen viser paringskoden, åpnes kodevinduet av seg selv (én gang per paring).
@@ -302,6 +311,10 @@ const deviceKey = (device) => `${device.type}:${device.host}`;
 function storedFavorites() {
   return state.device ? storage.read('fjern-favorites', {})[deviceKey(state.device)] : undefined;
 }
+// Favorittene står på én rad: 4 på vanlige telefoner, 5 på brede. Raden tegnes på nytt når bredden krysser grensen.
+const wideQuery = matchMedia('(min-width: 400px)');
+const slots = () => favoriteSlots(wideQuery.matches ? 400 : 0);
+wideQuery.addEventListener('change', () => renderApps({ force: true }));
 function saveFavorites(ids) {
   const all = storage.read('fjern-favorites', {});
   all[deviceKey(state.device)] = ids;
@@ -355,11 +368,22 @@ function applyCapabilities(capabilities) {
   $('.color-keys').hidden = !$$('.color-keys [data-cap]').some((el) => !el.hidden);
 }
 
-function renderApps() {
-  const visible = state.ready && state.apps.length > 0;
+// Raden tegnes bare på nytt når innholdet faktisk endres. Før ble den bygd på nytt ved hver statusoppdatering
+// (hvert 2,5 s): ikonene ble lastet på nytt, og et trykk som falt sammen med oppdateringen gikk tapt.
+let appsKey = '';
+function renderApps({ force = false } = {}) {
+  const visible = Boolean(state.device) && state.apps.length > 0;
   $('#apps').hidden = !visible;
-  if (!visible) return;
-  const favorites = favoriteApps(state.apps, storedFavorites());
+  // Frakoblet: raden blir stående nedtonet, så oppsettet ikke hopper når forbindelsen kommer tilbake.
+  $('#apps').classList.toggle('is-offline', visible && !state.ready);
+  if (!visible) {
+    appsKey = '';
+    return;
+  }
+  const favorites = favoriteApps(state.apps, storedFavorites(), slots());
+  const key = JSON.stringify([deviceKey(state.device), slots(), favorites.map((app) => [app.id, app.name, app.icon || ''])]);
+  if (!force && key === appsKey) return;
+  appsKey = key;
   const tiles = favorites.map((app) => {
     const tile = favTile(app.name, appIcon(app), () => launch(app, tile));
     return tile;
@@ -369,6 +393,7 @@ function renderApps() {
   allIcon.setAttribute('aria-hidden', 'true');
   allIcon.append(svgIcon('grid'));
   tiles.push(favTile('Alle apper', allIcon, openAllApps));
+  $('#appGrid').style.setProperty('--slots', String(slots() + 1));
   $('#appGrid').replaceChildren(...tiles);
 }
 
@@ -393,7 +418,11 @@ function appRow(app, favoriteIds) {
   star.setAttribute('aria-label', isFavorite ? `Fjern ${app.name} fra favoritter` : `Legg ${app.name} til favoritter`);
   star.append(svgIcon('star'));
   star.addEventListener('click', () => {
-    saveFavorites(toggleFavorite(state.apps, storedFavorites(), app.id));
+    if (!isFavorite && isFavoriteListFull(state.apps, storedFavorites(), slots())) {
+      toast(`Forsiden har plass til ${slots()} favoritter. Fjern en først.`);
+      return;
+    }
+    saveFavorites(toggleFavorite(state.apps, storedFavorites(), app.id, slots()));
     renderAllApps();
     renderApps();
   });
@@ -401,10 +430,18 @@ function appRow(app, favoriteIds) {
   return li;
 }
 
+// «Alle apper»: favorittene (det som står på forsiden) øverst med teller, deretter resten og systemapper.
 function renderAllApps() {
-  const favoriteIds = favoriteApps(state.apps, storedFavorites()).map((app) => app.id);
-  const { regular, system } = sortApps(state.apps);
+  const favorites = favoriteApps(state.apps, storedFavorites(), slots());
+  const favoriteIds = favorites.map((app) => app.id);
+  const rest = state.apps.filter((app) => !favoriteIds.includes(app.id));
+  const { regular, system } = sortApps(rest);
+  $('#favAppsTitle').textContent = `På forsiden (${favorites.length} av ${slots()})`;
+  $('#favApps').replaceChildren(...(favorites.length
+    ? favorites.map((app) => appRow(app, favoriteIds))
+    : [emptyItem('Ingen ennå. Trykk på stjernen ved en app.')]));
   $('#allApps').replaceChildren(...regular.map((app) => appRow(app, favoriteIds)));
+  $('#allAppsTitle').hidden = regular.length === 0;
   $('#systemApps').replaceChildren(...system.map((app) => appRow(app, favoriteIds)));
   $('#systemAppsTitle').hidden = system.length === 0;
 }
@@ -491,10 +528,11 @@ async function loadApps() {
 async function connect(device, { userInitiated = true, route = 'connect' } = {}) {
   if (userInitiated) haptic();
   const attempt = ++state.connecting;
+  // Samme TV på nytt (f.eks. «Prøv igjen»): appraden blir stående nedtonet til TV-en svarer.
+  if (!state.device || !sameDevice(state.device, device)) state.apps = [];
   state.device = device;
   state.ready = false;
   state.code = null;
-  state.apps = [];
   state.appsFor = null;
   state.message = `Kobler til ${device.name} …`;
   render();
@@ -570,8 +608,23 @@ async function send(key, button, { requireReady = true } = {}) {
   }
 }
 
+// Én åpning per app om gangen. Tar den tid (Android TV prøver flere lenker), viser flisen «Åpner …».
+const launching = new Set();
 async function launch(app, button, { retry = false } = {}) {
+  if (!state.ready) {
+    toast(state.message || 'TV-en er ikke tilkoblet ennå.');
+    flash(button, 'is-failed', 600);
+    return;
+  }
+  if (launching.has(app.id)) return;
+  launching.add(app.id);
   haptic();
+  const label = button?.querySelector('.fav-label');
+  const busy = setTimeout(() => {
+    button?.classList.add('is-busy');
+    button?.setAttribute('aria-busy', 'true');
+    if (label) label.textContent = 'Åpner …';
+  }, 300);
   try {
     const result = await api('launch', retry ? { id: app.id, retry: true } : { id: app.id });
     flash(button, 'is-sent', 200);
@@ -591,6 +644,12 @@ async function launch(app, button, { retry = false } = {}) {
   } catch (error) {
     flash(button, 'is-failed', 600);
     toast(error.message);
+  } finally {
+    clearTimeout(busy);
+    launching.delete(app.id);
+    button?.classList.remove('is-busy');
+    button?.removeAttribute('aria-busy');
+    if (label) label.textContent = app.name;
   }
 }
 
@@ -779,6 +838,16 @@ $('#renameForm').addEventListener('submit', (event) => {
 $('#removeConfirm').addEventListener('click', () => {
   if (removing) {
     state.saved = state.saved.filter((d) => !sameDevice(d, removing));
+    // TV-en som er i bruk: koble fra, så den ikke kommer tilbake ved neste statusoppdatering.
+    if (state.device && sameDevice(removing, state.device)) {
+      // Statusoppdateringer venter til broen har koblet fra (ellers kunne TV-en dukke opp igjen et øyeblikk).
+      const token = ++state.connecting;
+      Object.assign(state, { device: null, ready: false, code: null, message: '', capabilities: null, apps: [], appsFor: null, nowPlaying: null });
+      storage.write('fjern-selected', null);
+      api('disconnect', {}).catch(() => {}).finally(() => { if (state.connecting === token) state.connecting = 0; });
+      renderNowPlaying();
+      render();
+    }
     persist();
     renderLists();
   }
@@ -813,30 +882,7 @@ const RECENT_KEY = 'fjern-yt-recent';
 const recentSearches = () => addRecent(storage.read(RECENT_KEY, []), '');
 const rememberSearch = (query) => {
   storage.write(RECENT_KEY, addRecent(storage.read(RECENT_KEY, []), query));
-  renderHomeRecent();
 };
-
-// Siste søk vises også på forsiden, i plassen under søkefeltet (bare på høye skjermer, se CSS).
-const HOME_RECENT_MAX = 4;
-function renderHomeRecent() {
-  const list = recentSearches().slice(0, HOME_RECENT_MAX);
-  $('#homeRecent').hidden = list.length === 0;
-  $('#homeRecent').replaceChildren(...list.map((query) => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'chip';
-    const text = document.createElement('span');
-    text.textContent = query;
-    chip.append(svgIcon('recent'), text);
-    chip.setAttribute('aria-label', `Søk på YouTube etter ${query}`);
-    chip.addEventListener('click', () => {
-      openYouTube({ focus: false });
-      $('#ytQuery').value = query;
-      runSearch(query);
-    });
-    return chip;
-  }));
-}
 
 function renderRecent() {
   const list = recentSearches();
@@ -1123,9 +1169,7 @@ $('#ytQuery').addEventListener('input', onQueryInput);
 $('#ytRecentClear').addEventListener('click', () => {
   storage.write(RECENT_KEY, []);
   renderRecent();
-  renderHomeRecent();
 });
-renderHomeRecent();
 $('#ytMic').hidden = !voiceAvailable;
 $('#searchPillMic').hidden = !voiceAvailable;
 
