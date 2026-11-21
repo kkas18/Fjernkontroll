@@ -14,6 +14,7 @@ import { LG_EXTRA_KEYS, createKeyStore, createLgSession } from './lib/lg.mjs';
 import { SAMSUNG_EXTRA_KEYS, createSamsungSession, samsungProbe } from './lib/samsung.mjs';
 import { ANDROIDTV_EXTRA_KEYS, createAndroidTvSession, createIdentityStore } from './lib/androidtv.mjs';
 import { searchAndroidTv } from './lib/mdns.mjs';
+import { identifyTv } from './lib/probe.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const { version } = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
@@ -99,6 +100,8 @@ export function createBridge({
     extraSearches: [searchAndroidTv],
   }),
   rokuHealthTtl = 10_000,
+  // Finner TV-type ut fra IP-adressen alene (brukeren slipper å velge merke).
+  identify = (host) => identifyTv(host, { fetchImpl }),
 } = {}) {
   let selected = null;
   let rokuHealth = { host: null, ok: false, at: 0 };
@@ -262,6 +265,8 @@ export function createBridge({
     switch (route) {
       case '/api/scan':
         return sendJson(res, 200, { devices: await discover() });
+      case '/api/probe':
+        return sendJson(res, 200, { device: await identify(String(input.host ?? '').trim()) });
       case '/api/connect': {
         const device = validDevice(input.device);
         if (device.type === 'roku') {

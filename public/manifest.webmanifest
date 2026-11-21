@@ -9,8 +9,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0f1012",
-  "theme_color": "#0f1012",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
   "categories": ["utilities", "entertainment"],
   "icons": [
     { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

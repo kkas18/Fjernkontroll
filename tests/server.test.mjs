@@ -107,6 +107,10 @@ before(async () => {
     fetchImpl: fakeFetch,
     discover: async () => [{ type: 'roku', host: '192.168.1.5', name: 'Roku' }],
     rokuHealthTtl: 0,
+    identify: async (host) => {
+      if (host === '192.168.1.77') return { type: 'lg', host, name: 'LG-TV' };
+      throw new UserError('Fant ingen TV som Fjern støtter på denne adressen.', 404);
+    },
     diagnostics: (() => { const lines = []; return { lines, log: (m) => lines.push(`00:00:00 ${m}`) }; })(),
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -308,6 +312,15 @@ test('fjernes TV-en som er i bruk, kobler broen fra og glemmer valget', async ()
   assert.equal(fakeSamsung.disconnects, before + 1, 'Samsung-økten er koblet fra');
   assert.equal((await request('/api/status')).json.device, null, 'TV-en kommer ikke tilbake ved neste statusoppdatering');
   assert.equal((await post('/api/command', { key: 'Home' })).status, 409, 'ingen TV valgt');
+});
+
+test('IP-adresse alene: broen finner TV-typen selv', async () => {
+  const found = await post('/api/probe', { host: '192.168.1.77' });
+  assert.equal(found.status, 200);
+  assert.deepEqual(found.json.device, { type: 'lg', host: '192.168.1.77', name: 'LG-TV' });
+  const none = await post('/api/probe', { host: '192.168.1.78' });
+  assert.equal(none.status, 404);
+  assert.match(none.json.error, /Fant ingen TV/);
 });
 
 test('ny paring er ikke for Roku', async () => {

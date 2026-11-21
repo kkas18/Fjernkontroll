@@ -583,3 +583,46 @@ Android TV Remote-protokollen versjon 2 er den samme som Google Home-appen og an
 - Ende-til-ende med den ekte Node-broen og en falsk Android TV-boks over TLS: tilkobling, taster, TV 2 Play med «Prøv en annen måte», ny tilkobling og YouTube. Alt besto, uten JS-feil.
 
 Skår etter: **8,5/10**. Det som gjenstår er å teste mot ekte TV-er og bokser.
+
+## Runde 13: nytt design og enklere tilkobling (3.0.0)
+**Brukerens tilbakemelding:** Designet og funksjonene var ikke gode nok. Ønsket var en mer kompakt og moderne stil som er lett å bruke, et mer robust produkt, og at det skal være enkelt å koble seg til hvilken som helst TV.
+
+**Metode:** Gjennomgang av hele grensesnittet og tilkoblingsflyten, skjermbilder i Galaxy-størrelser og ny grensesnittest. Skår før: **6,5/10**.
+
+### Funn
+| # | Funn | Alvor |
+|---|---|---|
+| 1 | For å legge til en TV med IP-adresse måtte man vite merket og velge det selv. Valgte man feil merke, kom en teknisk feilmelding. | Alvorlig |
+| 2 | Tilkoblingen lå i flere små dialoger (legg til, par, kode). Det fantes ingen veiledning per merke om hva man skal gjøre på TV-en første gang. | Alvorlig |
+| 3 | Første oppstart viste en tom side med en knapp. Søket startet ikke av seg selv. | Design |
+| 4 | Forsiden hadde fjernkontroll, søkefelt, apper og «Siste søk» på samme flate. Mange funksjoner lå bak ark. | Design |
+| 5 | Ingen berøringsflate, som mange er vant til fra Google TV-fjernkontrollen. | Funksjon |
+| 6 | Volumknappene var smale trykkflater (36 px på 360 px brede telefoner), fordi etiketten tok plass. | Design |
+| 7 | Lagrede TV-er som søket ikke fant, kunne bare velges fra TV-listen, ikke fra søket. | Funksjon |
+
+### Utbedring
+1. **TV-merket finnes automatisk** (`/api/probe` i Node, `Probe.kt` i Android): broen sjekker alle kjennetegn samtidig og velger det mest entydige: Roku (HTTP 8060), Samsung (HTTP 8001), Android TV (TCP 6466) og LG (TCP 3001/3000). Brukeren skriver bare IP-adressen. Kjenner den ikke igjen TV-en, kommer en forklaring, og man kan velge merke selv.
+2. **Egen tilkoblingsskjerm:** Den søker med en gang, og TV-ene vises som store kort med merkebrikke, navn og adresse. Lagrede TV-er står også i listen, med «Lagret, ikke funnet nå» når søket ikke fant dem. Trykk på et kort, så vises veiledning for merket: «Godta» (LG), «Tillat» (Samsung), kode på seks tegn (Android TV) eller ingenting (Roku). Etterpå kommer en kort «Tilkoblet»-bekreftelse og fjernkontrollen. Ved feil vises «Fikk ikke kontakt» med «Prøv igjen» og «Velg en annen TV». Kodefeltet for Android TV åpnes av seg selv når boksen viser koden.
+3. **Tre faner nederst:** *Fjernkontroll*, *Apper* og *YouTube*. YouTube-fanen vises bare når TV-en kan spille YouTube. Android-tilbakeknappen lukker ark, går ett steg tilbake i tilkoblingen, og går til fjernkontrollen fra de andre fanene.
+4. **Kompakt fjernkontroll:**
+   - Toppen har TV-velgeren (navn, «type · status» og statuslampe) og strømknappen.
+   - Under står favorittappene på én rad, «Spilles nå» (skjules når TV-en er frakoblet), styrekorset og et kontrollpanel med tre rader.
+   - Vippebryterne for volum og kanal har hele halvdelen som trykkflate, og etiketten ligger over midten.
+   - Talltaster, kilde, innstillinger, skriv på TV og de øvrige tastene ligger under **Mer**.
+5. **Berøringsflate:** Den slås av og på med en rund knapp i hjørnet, utenfor sirkelen, og valget huskes. Sveip gir piltaster, ett steg per 40 px, i kø så raske sveip ikke mister steg. Et kort trykk gir OK.
+6. **Apper-fanen:** Appene vises som ikoner, med søk når det er 9 eller flere. **Velg favoritter** endrer hvilke apper som står på fjernkontrollen, og det gis beskjed når raden er full. Kildene (HDMI) står nederst.
+7. **Moderne, mørk palett:** nesten svart bakgrunn (`#09090b`), tre flatenivåer, én blå aksent og merkefarger på TV-brikkene. Appens bakgrunnsfarge i manifestet og i Android er oppdatert til samme farge.
+
+### Grensesnittesten (`npm run check:ui`), utvidet til 146 sjekker
+- **Oppsett:** 4 TV-typer × 5 størrelser (320×568 til 412×915) × 4 tilstander (enkel, full, frakoblet, berøringsflate). Den sjekker også at knappene i kontrollpanelet ikke overlapper, og at bytteknappen ikke ligger over styrekorset.
+- **Tilkobling:** søk ved første oppstart, LG med veiledning, Android TV-kode (filtrering, feil kode, riktig kode), IP-adresse med automatisk merke, ukjent TV med merkevalg, «Fikk ikke kontakt», og endret sertifikat («Par på nytt» via `repair`).
+- **Funksjoner:** faner, tilbakeknappen, YouTube med «Spilles nå», tastatur, «Mer» og «Kilde», TV-velgeren, favoritter med tak, «Åpner …», berøringsflaten (sveip og trykk, huskes), frakoblet tilstand og fjerning av TV-en som er i bruk.
+- `SHOTS=<mappe>` lagrer skjermbilder av alle skjermene. Utvalget ligger i `docs/revisjon/runde13/`.
+
+### Verifisert
+- `npm run verify`: **141/141**. Det inkluderer nye tester for `identifyTv` (alle merker, rekkefølge, ukjent adresse, ugyldig IP, ekte TCP-sjekk) og for broens `/api/probe`.
+- Kotlin: **40/40**, med `probe` i rutelisten og samme rekkefølge som i Node.
+- `npm run check:ui`: **146/146**.
+- Ende-til-ende med den ekte Node-broen uten TV: første oppstart søker, og en ukjent IP-adresse gir forklaring og merkevalg etter 78 ms, uten JS-feil.
+
+Skår etter: **9/10**. Det som gjenstår er å teste tilkoblingen mot ekte TV-er av alle fire merkene.
