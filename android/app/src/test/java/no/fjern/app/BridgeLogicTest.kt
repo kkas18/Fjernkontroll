@@ -174,6 +174,40 @@ class BridgeLogicTest {
         assertTrue("ytsuggest" in Bridge.ROUTES)
     }
 
+    @Test fun probeDecidesTvTypeInTheSameOrderAsNode() {
+        val roku = Device("roku", "192.168.1.5", "Stue-Roku")
+        val samsung = Device("samsung", "192.168.1.5", "Samsung Q80")
+        assertEquals(roku, Probe.decide("192.168.1.5", roku, samsung, androidtv = true, lg = true))
+        assertEquals(samsung, Probe.decide("192.168.1.5", null, samsung, androidtv = true, lg = true))
+        assertEquals(Device("androidtv", "192.168.1.5", "Android TV"), Probe.decide("192.168.1.5", null, null, androidtv = true, lg = true))
+        assertEquals(Device("lg", "192.168.1.5", "LG-TV"), Probe.decide("192.168.1.5", null, null, androidtv = false, lg = true))
+        try { Probe.decide("192.168.1.5", null, null, androidtv = false, lg = false); throw AssertionError("forventet feil") } catch (e: UserError) {
+            assertEquals(404, e.status)
+            assertEquals(Probe.NOT_FOUND, e.message)
+        }
+        assertEquals(listOf(6466), Probe.ANDROIDTV_PORTS)
+        assertEquals(listOf(3001, 3000), Probe.LG_PORTS)
+        assertTrue("probe" in Bridge.ROUTES)
+    }
+
+    @Test fun probeChecksEverySignatureWithoutNetwork(): Unit = kotlinx.coroutines.runBlocking {
+        val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val found = Probe.identify(
+            "192.168.1.60",
+            probeRoku = { asked += "roku"; throw UserError("nei") },
+            probeSamsung = { asked += "samsung"; throw UserError("nei") },
+            portOpen = { _, port -> asked += "tcp:$port"; port == 6466 },
+        )
+        assertEquals(Device("androidtv", "192.168.1.60", "Android TV"), found)
+        assertEquals(setOf("roku", "samsung", "tcp:6466", "tcp:3001", "tcp:3000"), asked.toSet())
+        try { Probe.identify("8.8.8.8"); throw AssertionError("forventet feil") } catch (_: UserError) {}
+        val local = java.net.ServerSocket(0)
+        assertTrue(Probe.tcpOpen("127.0.0.1", local.localPort, 1000))
+        val port = local.localPort
+        local.close()
+        assertTrue(!Probe.tcpOpen("127.0.0.1", port, 1000))
+    }
+
     @Test fun `feilsøkingsloggen har tak`() {
         repeat(200) { Diagnostics.add("linje $it") }
         val lines = Diagnostics.snapshot()

@@ -28,7 +28,7 @@ class Bridge(
         /** Alle ruter grensesnittet kan kalle. NativeBridge slipper bare disse gjennom (testet mot public/app.js). */
         val ROUTES = setOf(
             "status", "scan", "connect", "repair", "pair", "apps", "launch", "command", "text", "diagnostics",
-            "inputs", "input", "ytsearch", "ytsuggest", "ytplay", "disconnect",
+            "inputs", "input", "ytsearch", "ytsuggest", "ytplay", "disconnect", "probe",
         )
     }
 
@@ -210,6 +210,11 @@ class Bridge(
                     array.put(JSONObject().put("id", it.id).put("title", it.title).put("channel", it.channel).put("duration", it.duration).put("views", it.views))
                 }
             })
+        }
+        if (route == "probe") {
+            // Finner TV-type ut fra IP-adressen alene (brukeren slipper å velge merke).
+            val host = input?.optString("host").orEmpty().trim()
+            return JSONObject().put("device", Probe.identify(host).toJson())
         }
         if (route == "scan") {
             return JSONObject().put("devices", JSONArray().also { array -> discover().forEach { array.put(it.toJson()) } })

@@ -1,6 +1,8 @@
 // Fjern – grensesnittet. Snakker bare med den lokale broen på samme opprinnelse.
+// Oppbygging: TV-velger og strøm øverst, tre faner (Fjernkontroll, Apper, YouTube) og en egen
+// «Koble til TV»-skjerm som søker, gjenkjenner merket ut fra IP-adressen og veileder per merke.
 import {
-  addRecent, BRIDGE_DOWN, bundledIcon, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, favoriteSlots, initials, isFavoriteListFull, isPrivateIPv4, isValidDevice, newDevices, noticeFor,
+  addRecent, BRIDGE_DOWN, bundledIcon, DEFAULT_NAMES, displayName, fallbackColor, favoriteApps, favoriteSlots, initials, isFavoriteListFull, isPrivateIPv4, isValidDevice, noticeFor,
   normalizeName, rememberDevice, sameDevice, sortApps, toggleFavorite, typeLabel,
 } from './logic.js';
 
@@ -8,12 +10,12 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const POLL_MS = 2500;
+const FAST_POLL_MS = 1000;
 const REPEAT_DELAY_MS = 400;
 const REPEAT_EVERY_MS = 150;
 
 const state = {
   saved: [],
-  found: [],
   device: null,
   ready: false,
   bridge: true,
@@ -22,9 +24,10 @@ const state = {
   capabilities: null,
   apps: [],
   appsFor: null,
-  scanning: false,
   connecting: 0,
   announcedReady: null,
+  view: 'remote',
+  nowPlaying: null,
 };
 
 // Lagring kan være blokkert (privat modus, full lagring). Appen skal virke likevel.
@@ -107,7 +110,7 @@ function applyStatus(status) {
   state.capabilities = status.capabilities || null;
 }
 
-// ---------- Visning ----------
+// ---------- Små hjelpere ----------
 
 function svgIcon(name) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -119,45 +122,66 @@ function svgIcon(name) {
   return svg;
 }
 
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
 let toastTimer;
 // Varsel nederst. Med handling (for eksempel «Prøv en annen måte») får det en knapp og står lenger.
 function toast(message, action = null) {
-  const el = $('#toast');
-  const text = document.createElement('span');
-  text.textContent = message;
-  el.replaceChildren(text);
-  el.classList.toggle('has-action', Boolean(action));
+  const box = $('#toast');
+  box.replaceChildren(el('span', '', message));
+  box.classList.toggle('has-action', Boolean(action));
   if (action) {
-    const button = document.createElement('button');
+    const button = el('button', 'toast-action', action.label);
     button.type = 'button';
-    button.className = 'toast-action';
-    button.textContent = action.label;
     button.addEventListener('click', () => {
       hideToast();
       action.run();
     });
-    el.append(button);
+    box.append(button);
   }
   clearTimeout(toastTimer);
   // Åpne ark ligger i nettleserens øverste lag. Meldingen legges der på nytt hver gang, så den havner over dem.
-  if (el.showPopover) {
+  if (box.showPopover) {
     try {
-      if (el.matches(':popover-open')) el.hidePopover();
-      el.showPopover();
+      if (box.matches(':popover-open')) box.hidePopover();
+      box.showPopover();
     } catch { /* popover støttes ikke: vises som før */ }
   }
-  requestAnimationFrame(() => el.classList.add('show'));
+  requestAnimationFrame(() => box.classList.add('show'));
   toastTimer = setTimeout(hideToast, action ? 7000 : 3200);
 }
 function hideToast() {
-  const el = $('#toast');
+  const box = $('#toast');
   clearTimeout(toastTimer);
-  el.classList.remove('show');
-  toastTimer = setTimeout(() => { try { el.hidePopover?.(); } catch { /* allerede skjult */ } }, 200);
+  box.classList.remove('show');
+  toastTimer = setTimeout(() => { try { box.hidePopover?.(); } catch { /* allerede skjult */ } }, 200);
 }
 
 function haptic(pattern = 10) {
   navigator.vibrate?.(pattern);
+}
+
+function emptyItem(text, tag = 'li') {
+  return el(tag, 'list-empty', text);
+}
+
+// Merkemerke (farget brikke) for TV-typen, brukt i søkeresultater, TV-listen og tilkoblingen.
+const BRAND_SHORT = { roku: 'Roku', lg: 'LG', samsung: 'SAM', androidtv: 'ATV' };
+// Undertekst for en TV: merke og adresse (tall med fast bredde) på én linje.
+function metaLine(device, extra = '') {
+  return el('small', 'tnum', [typeLabel(device.type), device.host, extra].filter(Boolean).join(' · '));
+}
+
+function brandBadge(type) {
+  const badge = el('span', 'brand-badge', BRAND_SHORT[type] || 'TV');
+  badge.dataset.type = type;
+  badge.setAttribute('aria-hidden', 'true');
+  return badge;
 }
 
 // ---------- Ark ----------
@@ -186,10 +210,10 @@ function closeSheet(dialog) {
   dialog.addEventListener('animationend', finish, { once: true });
   setTimeout(finish, 260);
 }
+const closeAllSheets = () => $$('dialog[open]').forEach((dialog) => dialog.close());
 
 function enableSheet(dialog) {
-  const grip = document.createElement('div');
-  grip.className = 'sheet-grip';
+  const grip = el('div', 'sheet-grip');
   grip.setAttribute('aria-hidden', 'true');
   dialog.prepend(grip);
 
@@ -238,13 +262,26 @@ function enableSheet(dialog) {
 }
 $$('dialog.sheet').forEach(enableSheet);
 
-// Skjermlesere får beskjed når TV-en blir klar, siden statuslinjen da skjules.
+// ---------- Visning ----------
+
+// Skjermlesere får beskjed når TV-en blir klar, siden merknaden da skjules.
 function announce() {
   const key = state.ready && state.device ? `${state.device.type}:${state.device.host}` : null;
   if (key === state.announcedReady) return;
   state.announcedReady = key;
   if (key) $('#announce').textContent = `Tilkoblet ${displayName(state.device, state.saved)}.`;
 }
+
+// Kort status under TV-navnet. Detaljer og handlinger står i merknaden under toppen.
+function statusWord() {
+  if (!state.bridge) return 'Broen svarer ikke';
+  if (state.ready) return 'Tilkoblet';
+  if (state.connecting) return 'Kobler til …';
+  if (state.code === 'needs-code') return 'Venter på kode';
+  return 'Ikke tilkoblet';
+}
+
+const VIEWS = { remote: '#remote', apps: '#appsView', yt: '#ytView' };
 
 function render() {
   const { device, ready, bridge, capabilities } = state;
@@ -263,30 +300,51 @@ function render() {
   $('#noticeAction').textContent = notice.action?.label || '';
   $('#noticeAction').dataset.action = notice.action?.id || '';
 
-  $('#remote').hidden = !device;
-  $('#homeTop').hidden = !device || capabilities?.search !== 'youtube';
-  $('#empty').hidden = Boolean(device);
+  // YouTube-fanen finnes bare når TV-en kan spille YouTube.
+  const youtube = capabilities?.search === 'youtube' || !capabilities;
+  $('.tab[data-view="yt"]').hidden = !youtube;
+  if (!youtube && state.view === 'yt') state.view = 'remote';
+  for (const [view, selector] of Object.entries(VIEWS)) $(selector).hidden = !device || state.view !== view;
+  for (const tab of $$('.tab')) {
+    if (tab.dataset.view === state.view) tab.setAttribute('aria-current', 'page');
+    else tab.removeAttribute('aria-current');
+  }
+  $('#tabbar').hidden = !device;
   $('#powerOpen').hidden = !device; // uten TV er det ingenting å slå av eller på
   $('#textOpen').disabled = !device;
 
   $('#channelRocker').classList.toggle('is-unused', capabilities?.channels === false);
   applyCapabilities(capabilities);
+  showNowHome();
 
   renderApps();
+  renderAppsView();
   announce();
   promptPairing();
+  renderConnect();
+  // Uten valgt TV er tilkoblingsskjermen det eneste som gir mening.
+  if (!device && $('#connectView').hidden) openConnect();
 }
 
-// Kort status under TV-navnet. Detaljer og handlinger står i merknaden under toppen.
-function statusWord() {
-  if (!state.bridge) return 'Broen svarer ikke';
-  if (state.ready) return 'Tilkoblet';
-  if (state.connecting) return 'Kobler til …';
-  if (state.code === 'needs-code') return 'Venter på kode';
-  return 'Ikke tilkoblet';
+function switchView(view) {
+  if (!VIEWS[view] || view === state.view) return;
+  state.view = view;
+  render();
+  if (view === 'apps') {
+    loadInputs();
+    $('#appsView').scrollTop = 0;
+  }
+  if (view === 'yt') {
+    renderRecent();
+    renderNowPlaying();
+  }
 }
+$$('.tab').forEach((tab) => tab.addEventListener('click', () => {
+  haptic(6);
+  switchView(tab.dataset.view);
+}));
 
-// Android TV: når boksen viser paringskoden, åpnes kodevinduet av seg selv (én gang per paring).
+// Android TV: når boksen viser paringskoden, åpnes kodefeltet av seg selv (én gang per paring).
 let pairPrompted = false;
 function promptPairing() {
   const waiting = state.code === 'needs-code' && state.device?.type === 'androidtv';
@@ -294,19 +352,13 @@ function promptPairing() {
     pairPrompted = false;
     return;
   }
-  if (pairPrompted || document.querySelector('dialog[open]')) return;
+  if (pairPrompted || document.querySelector('dialog[open]') || connectState.step === 'pair') return;
   pairPrompted = true;
-  openPair();
+  openPairFor(state.device);
 }
 
-function openPair() {
-  $('#pairCode').value = '';
-  $('#pairError').hidden = true;
-  $('#pairDialog').showModal();
-  $('#pairCode').focus();
-}
+// ---------- Favoritter (raske snarveier på fjernkontrollen) ----------
 
-// Favoritter lagres per TV i brukerens rekkefølge.
 const deviceKey = (device) => `${device.type}:${device.host}`;
 function storedFavorites() {
   return state.device ? storage.read('fjern-favorites', {})[deviceKey(state.device)] : undefined;
@@ -314,7 +366,10 @@ function storedFavorites() {
 // Favorittene står på én rad: 4 på vanlige telefoner, 5 på brede. Raden tegnes på nytt når bredden krysser grensen.
 const wideQuery = matchMedia('(min-width: 400px)');
 const slots = () => favoriteSlots(wideQuery.matches ? 400 : 0);
-wideQuery.addEventListener('change', () => renderApps({ force: true }));
+wideQuery.addEventListener('change', () => {
+  renderApps({ force: true });
+  renderAppsView();
+});
 function saveFavorites(ids) {
   const all = storage.read('fjern-favorites', {});
   all[deviceKey(state.device)] = ids;
@@ -324,11 +379,9 @@ function saveFavorites(ids) {
 // Ikonet hentes fra TV-en via broen, eller følger med appen (Android TV). Til det er lastet
 // (eller hvis det mangler) vises forbokstaver.
 function appIcon(app, size = 'm') {
-  const box = document.createElement('span');
-  box.className = `app-icon ${size}`;
+  const box = el('span', `app-icon ${size}`, initials(app.name));
   box.style.setProperty('--app-color', fallbackColor(app));
   box.setAttribute('aria-hidden', 'true');
-  box.textContent = initials(app.name);
   const img = document.createElement('img');
   img.alt = '';
   img.loading = 'lazy';
@@ -341,35 +394,30 @@ function appIcon(app, size = 'm') {
 }
 
 function favTile(label, icon, onClick) {
-  const button = document.createElement('button');
+  const button = el('button', 'fav');
   button.type = 'button';
-  button.className = 'fav';
-  const text = document.createElement('span');
-  text.className = 'fav-label';
-  text.textContent = label;
-  button.append(icon, text);
+  button.append(icon, el('span', 'fav-label', label));
   button.addEventListener('click', onClick);
   return button;
 }
 
-// Taster og funksjoner TV-en ikke har, skjules. Talltaster og fargetaster beholder plassen sin
-// (så rutenettet ikke hopper), resten fjernes helt.
+// Taster og funksjoner TV-en ikke har, skjules. Talltaster beholder plassen sin (så rutenettet ikke hopper).
 function supports(capabilities, cap) {
   if (!capabilities) return false;
   if (cap in capabilities) return Boolean(capabilities[cap]);
   return Array.isArray(capabilities.keys) && capabilities.keys.includes(cap);
 }
 function applyCapabilities(capabilities) {
-  for (const el of $$('[data-cap]')) {
-    const ok = supports(capabilities, el.dataset.cap);
-    if (el.classList.contains('num')) el.classList.toggle('is-unavailable', !ok);
-    else el.hidden = !ok;
+  for (const node of $$('[data-cap]')) {
+    const ok = supports(capabilities, node.dataset.cap);
+    if (node.classList.contains('num')) node.classList.toggle('is-unavailable', !ok);
+    else node.hidden = !ok;
   }
-  $('.color-keys').hidden = !$$('.color-keys [data-cap]').some((el) => !el.hidden);
+  $('.color-keys').hidden = !$$('.color-keys [data-cap]').some((node) => !node.hidden);
 }
 
-// Raden tegnes bare på nytt når innholdet faktisk endres. Før ble den bygd på nytt ved hver statusoppdatering
-// (hvert 2,5 s): ikonene ble lastet på nytt, og et trykk som falt sammen med oppdateringen gikk tapt.
+// Raden tegnes bare på nytt når innholdet faktisk endres (ellers lastes ikonene på nytt hvert 2,5 s,
+// og et trykk som faller sammen med en statusoppdatering, går tapt).
 let appsKey = '';
 function renderApps({ force = false } = {}) {
   const visible = Boolean(state.device) && state.apps.length > 0;
@@ -388,127 +436,464 @@ function renderApps({ force = false } = {}) {
     const tile = favTile(app.name, appIcon(app), () => launch(app, tile));
     return tile;
   });
-  const allIcon = document.createElement('span');
-  allIcon.className = 'app-icon m all';
+  const allIcon = el('span', 'app-icon m all');
   allIcon.setAttribute('aria-hidden', 'true');
   allIcon.append(svgIcon('grid'));
-  tiles.push(favTile('Alle apper', allIcon, openAllApps));
+  tiles.push(favTile('Alle', allIcon, () => switchView('apps')));
+  tiles.at(-1).setAttribute('aria-label', 'Alle apper');
   $('#appGrid').style.setProperty('--slots', String(slots() + 1));
   $('#appGrid').replaceChildren(...tiles);
 }
 
-function appRow(app, favoriteIds) {
-  const li = document.createElement('li');
-  li.className = 'app-row';
-  const open = document.createElement('button');
-  open.type = 'button';
-  open.className = 'app-open';
-  const name = document.createElement('span');
-  name.textContent = app.name;
-  open.append(appIcon(app, 's'), name);
-  open.addEventListener('click', () => {
-    closeSheet($('#appsSheet'));
-    launch(app, null);
-  });
-  const star = document.createElement('button');
-  star.type = 'button';
-  star.className = 'app-star';
-  const isFavorite = favoriteIds.includes(app.id);
-  star.setAttribute('aria-pressed', String(isFavorite));
-  star.setAttribute('aria-label', isFavorite ? `Fjern ${app.name} fra favoritter` : `Legg ${app.name} til favoritter`);
-  star.append(svgIcon('star'));
-  star.addEventListener('click', () => {
+// ---------- Apper-fanen ----------
+
+let appsEdit = false;
+let appFilter = '';
+let appsViewKey = '';
+
+function appTile(app, isFavorite) {
+  const tile = el('button', 'tile');
+  tile.type = 'button';
+  tile.append(appIcon(app, 'l'), el('span', 'tile-name', app.name));
+  if (appsEdit) {
+    tile.setAttribute('aria-pressed', String(isFavorite));
+    tile.setAttribute('aria-label', isFavorite ? `Fjern ${app.name} fra favoritter` : `Legg ${app.name} til favoritter`);
+    const star = el('span', 'tile-star');
+    star.setAttribute('aria-hidden', 'true');
+    star.append(svgIcon('star'));
+    tile.append(star);
+  }
+  tile.addEventListener('click', () => {
+    if (!appsEdit) return launch(app, tile);
     if (!isFavorite && isFavoriteListFull(state.apps, storedFavorites(), slots())) {
-      toast(`Forsiden har plass til ${slots()} favoritter. Fjern en først.`);
+      toast(`Fjernkontrollen har plass til ${slots()} favoritter. Fjern en først.`);
       return;
     }
+    haptic(6);
     saveFavorites(toggleFavorite(state.apps, storedFavorites(), app.id, slots()));
-    renderAllApps();
+    renderAppsView({ force: true });
     renderApps();
   });
-  li.append(open, star);
+  return tile;
+}
+
+function renderAppsView({ force = false } = {}) {
+  const view = $('#appsView');
+  if (view.hidden) return;
+  view.classList.toggle('is-offline', !state.ready);
+  const max = slots();
+  const favorites = favoriteApps(state.apps, storedFavorites(), max);
+  const key = JSON.stringify([state.device && deviceKey(state.device), state.ready, appsEdit, appFilter, max,
+    favorites.map((app) => app.id), state.apps.map((app) => [app.id, app.name, app.icon || ''])]);
+  if (!force && key === appsViewKey) return;
+  appsViewKey = key;
+
+  const favoriteIds = favorites.map((app) => app.id);
+  const q = appFilter.trim().toLowerCase();
+  const match = (app) => !q || app.name.toLowerCase().includes(q);
+  const { regular, system } = sortApps(state.apps.filter((app) => !favoriteIds.includes(app.id)));
+  const others = [...regular, ...system].filter(match);
+  const shownFavorites = favorites.filter(match);
+
+  $('#favEdit').hidden = state.apps.length === 0;
+  $('#favEdit').textContent = appsEdit ? 'Ferdig' : 'Velg favoritter';
+  $('#favEdit').setAttribute('aria-pressed', String(appsEdit));
+  $('#appSearchBox').hidden = state.apps.length < 9;
+  $('#appsHint').hidden = !appsEdit;
+  $('#appsHint').textContent = `Trykk på en app for å legge den til eller fjerne den. Fjernkontrollen har plass til ${max}.`;
+  $('#favAppsTitle').textContent = appsEdit ? `Favoritter (${favorites.length} av ${max})` : 'Favoritter';
+  $('#favApps').replaceChildren(...(shownFavorites.length
+    ? shownFavorites.map((app) => appTile(app, true))
+    : [emptyItem(q ? 'Ingen favoritter passer søket.' : 'Ingen ennå. Trykk «Velg favoritter».', 'p')]));
+  $('#allAppsTitle').textContent = q ? 'Treff' : 'Alle apper';
+  const emptyText = state.apps.length ? 'Ingen apper passer søket.' : state.ready ? 'Henter apper …' : 'Koble til TV-en for å se appene.';
+  $('#allApps').replaceChildren(...(others.length ? others.map((app) => appTile(app, false)) : [emptyItem(emptyText, 'p')]));
+}
+
+$('#favEdit').addEventListener('click', () => {
+  appsEdit = !appsEdit;
+  renderAppsView({ force: true });
+});
+$('#appSearch').addEventListener('input', (event) => {
+  appFilter = event.currentTarget.value;
+  renderAppsView();
+});
+
+// Kilder (HDMI og lignende) står nederst i Apper-fanen.
+let inputsFor = null;
+async function loadInputs({ force = false } = {}) {
+  const show = Boolean(state.device) && state.ready && supports(state.capabilities, 'inputs');
+  $('#inputsTitle').hidden = !show;
+  $('#inputList').hidden = !show;
+  if (!show) return;
+  const key = deviceKey(state.device);
+  if (!force && inputsFor === key) return;
+  inputsFor = key;
+  const list = $('#inputList');
+  list.replaceChildren(emptyItem('Henter kilder …'));
+  try {
+    const { inputs } = await api('inputs');
+    list.replaceChildren(...(inputs.length ? inputs.map(inputRow) : [emptyItem('Fant ingen kilder på TV-en.')]));
+  } catch (error) {
+    inputsFor = null;
+    list.replaceChildren(emptyItem(error.message));
+  }
+}
+
+function inputRow(input) {
+  const li = el('li');
+  const button = el('button', 'input-row');
+  button.type = 'button';
+  if (!input.connected) button.classList.add('is-disconnected');
+  const icon = el('span', 'app-icon all');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.append(svgIcon('hdmi'));
+  button.append(icon, el('span', '', input.connected ? input.name : `${input.name} (ikke tilkoblet)`));
+  button.addEventListener('click', async () => {
+    haptic();
+    try {
+      await api('input', { id: input.id });
+      toast(`Bytter til ${input.name}.`);
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  li.append(button);
   return li;
 }
 
-// «Alle apper»: favorittene (det som står på forsiden) øverst med teller, deretter resten og systemapper.
-function renderAllApps() {
-  const favorites = favoriteApps(state.apps, storedFavorites(), slots());
-  const favoriteIds = favorites.map((app) => app.id);
-  const rest = state.apps.filter((app) => !favoriteIds.includes(app.id));
-  const { regular, system } = sortApps(rest);
-  $('#favAppsTitle').textContent = `På forsiden (${favorites.length} av ${slots()})`;
-  $('#favApps').replaceChildren(...(favorites.length
-    ? favorites.map((app) => appRow(app, favoriteIds))
-    : [emptyItem('Ingen ennå. Trykk på stjernen ved en app.')]));
-  $('#allApps').replaceChildren(...regular.map((app) => appRow(app, favoriteIds)));
-  $('#allAppsTitle').hidden = regular.length === 0;
-  $('#systemApps').replaceChildren(...system.map((app) => appRow(app, favoriteIds)));
-  $('#systemAppsTitle').hidden = system.length === 0;
-}
+// ---------- TV-er (lagrede) ----------
 
-function openAllApps() {
-  renderAllApps();
-  $('#appsSheet').showModal();
-}
-
-function deviceItem(device, { stored }) {
-  const li = document.createElement('li');
-  li.className = 'device-item';
-
-  const select = document.createElement('button');
+function deviceItem(device) {
+  const li = el('li', 'device-item');
+  const select = el('button', 'device-select');
   select.type = 'button';
-  select.className = 'device-select';
   if (sameDevice(device, state.device)) select.setAttribute('aria-current', 'true');
-  const name = document.createElement('strong');
-  name.textContent = displayName(device, state.saved);
-  const detail = document.createElement('small');
-  detail.className = 'mono';
-  detail.textContent = `${typeLabel(device.type)} · ${device.host}`;
-  select.append(name, detail);
+  const text = el('span', 'found-text');
+  text.append(el('strong', '', displayName(device, state.saved)), metaLine(device));
+  select.append(brandBadge(device.type), text);
   select.addEventListener('click', () => {
     closeSheet($('#devicesSheet'));
-    connect(device);
+    if (!sameDevice(device, state.device) || !state.ready) connect(device);
   });
-  li.append(select);
 
-  if (stored) {
-    const rename = document.createElement('button');
-    rename.type = 'button';
-    rename.className = 'device-remove';
-    rename.setAttribute('aria-label', `Gi ${displayName(device, state.saved)} nytt navn`);
-    rename.append(svgIcon('edit'));
-    rename.addEventListener('click', () => askRename(device));
-    li.append(rename);
+  const rename = el('button', 'device-remove');
+  rename.type = 'button';
+  rename.setAttribute('aria-label', `Gi ${displayName(device, state.saved)} nytt navn`);
+  rename.append(svgIcon('edit'));
+  rename.addEventListener('click', () => askRename(device));
 
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'device-remove';
-    remove.setAttribute('aria-label', `Fjern ${device.name}`);
-    remove.append(svgIcon('trash'));
-    remove.addEventListener('click', () => askRemove(device));
-    li.append(remove);
-  }
+  const remove = el('button', 'device-remove');
+  remove.type = 'button';
+  remove.setAttribute('aria-label', `Fjern ${displayName(device, state.saved)}`);
+  remove.append(svgIcon('trash'));
+  remove.addEventListener('click', () => askRemove(device));
+
+  li.append(select, rename, remove);
   return li;
 }
 
-function emptyItem(text) {
-  const li = document.createElement('li');
-  li.className = 'list-empty';
-  li.textContent = text;
-  return li;
-}
-
-function renderLists() {
-  const saved = state.saved.map((d) => deviceItem(d, { stored: true }));
+function renderSavedList() {
+  const saved = state.saved.map(deviceItem);
   $('#savedList').replaceChildren(...(saved.length ? saved : [emptyItem('Ingen lagrede TV-er ennå.')]));
-
-  const found = newDevices(state.found, state.saved).map((d) => deviceItem(d, { stored: false }));
-  const emptyText = state.scanning ? 'Søker …' : 'Ingen nye TV-er. Trykk Søk, eller legg til med IP.';
-  $('#foundList').replaceChildren(...(found.length ? found : [emptyItem(emptyText)]));
-
-  $('#scan').disabled = state.scanning;
-  $('#scanLabel').textContent = state.scanning ? 'Søker …' : 'Søk';
 }
+
+function openDevices() {
+  renderSavedList();
+  $('#devicesSheet').showModal();
+}
+
+// ---------- Koble til TV ----------
+
+const connectState = { step: null, target: null, scanning: false, found: [], doneTimer: 0, fastPoll: 0 };
+const STEP_IDS = { search: '#stepSearch', manual: '#stepManual', pair: '#stepPair', done: '#stepDone' };
+const STEP_TITLES = { search: 'Koble til TV', manual: 'Skriv inn IP-adresse', pair: 'Kobler til', done: 'Tilkoblet' };
+// Hva brukeren skal gjøre på TV-en første gang, per merke.
+const BRAND_GUIDE = {
+  lg: 'Se på TV-en og velg «Godta» når den spør om tilkobling. Det skjer bare første gang.',
+  samsung: 'Se på TV-en og velg «Tillat» når den spør. Det skjer bare første gang.',
+  androidtv: 'Første gang viser TV-en en kode på seks tegn. Den skriver du inn her.',
+  roku: 'Roku kobler til uten godkjenning. Hvis det stopper opp: slå på «Control by mobile apps» i TV-ens innstillinger.',
+};
+
+function openConnect({ step = 'search' } = {}) {
+  closeAllSheets();
+  $('#connectView').hidden = false;
+  showStep(step);
+  renderConnect();
+  if (step === 'search') startScan();
+}
+
+function closeConnect() {
+  stopFastPoll();
+  clearTimeout(connectState.doneTimer);
+  connectState.step = null;
+  $('#connectView').hidden = true;
+}
+
+function showStep(step) {
+  connectState.step = step;
+  for (const [name, selector] of Object.entries(STEP_IDS)) $(selector).hidden = name !== step;
+  $('#connectTitle').textContent = STEP_TITLES[step];
+  $('#connectView').classList.toggle('is-first', !state.device && step === 'search');
+  if (step !== 'pair') stopFastPoll();
+  $('#connectView').scrollTop = 0;
+}
+
+// Uten valgt TV kan tilkoblingsskjermen ikke lukkes (det finnes ingenting bak den).
+function renderConnect() {
+  if ($('#connectView').hidden) return;
+  $('#connectView').classList.toggle('is-first', !state.device && connectState.step === 'search');
+  if (connectState.step === 'pair') renderPairStep();
+}
+
+function startFastPoll() {
+  stopFastPoll();
+  connectState.fastPoll = setInterval(refreshStatus, FAST_POLL_MS);
+}
+function stopFastPoll() {
+  clearInterval(connectState.fastPoll);
+  connectState.fastPoll = 0;
+}
+
+async function startScan() {
+  if (connectState.scanning) return;
+  connectState.scanning = true;
+  connectState.found = [];
+  $('#connectView').classList.add('is-scanning');
+  $('#scanStatus').textContent = 'Søker etter TV-er på Wi‑Fi …';
+  $('#scanAgain').disabled = true;
+  renderFound();
+  try {
+    const answer = await api('scan', {});
+    connectState.found = (answer.devices || []).filter(isValidDevice);
+    const n = connectState.found.length;
+    $('#scanStatus').textContent = n
+      ? `Fant ${n === 1 ? 'én TV' : `${n} TV-er`}. Trykk på den du vil styre.`
+      : state.saved.length
+        ? 'Søket fant ingen TV-er. Velg en lagret TV, søk igjen eller skriv inn IP-adressen.'
+        : 'Fant ingen TV-er. Søk igjen, eller skriv inn IP-adressen.';
+  } catch (error) {
+    $('#scanStatus').textContent = error.message;
+  } finally {
+    connectState.scanning = false;
+    $('#connectView').classList.remove('is-scanning');
+    $('#scanAgain').disabled = false;
+    renderFound();
+  }
+}
+
+// Funne TV-er først, deretter lagrede som søket ikke fant (de kan likevel være på, for eksempel når
+// nettverket stopper søket). TV-en som allerede er i bruk, står ikke i listen.
+function renderFound() {
+  const found = connectState.found;
+  const savedOnly = state.saved.filter((d) => !found.some((f) => sameDevice(f, d)));
+  const list = [...found, ...savedOnly].filter((d) => !(state.ready && state.device && sameDevice(d, state.device)));
+  const items = list.map((device, index) => {
+    const li = el('li');
+    const button = el('button', 'found-item');
+    button.type = 'button';
+    button.style.animationDelay = `${index * 50}ms`;
+    const saved = state.saved.find((d) => sameDevice(d, device));
+    const text = el('span', 'found-text');
+    const where = found.some((f) => sameDevice(f, device)) ? (saved ? 'Lagret' : '') : 'Lagret, ikke funnet nå';
+    text.append(el('strong', '', saved ? displayName(saved, state.saved) : device.name), metaLine(device, where));
+    button.append(brandBadge(device.type), text, svgIcon('chevron-right'));
+    button.addEventListener('click', () => beginConnect(saved ? { ...device, name: saved.name } : device));
+    li.append(button);
+    return li;
+  });
+  $('#foundList').replaceChildren(...items);
+}
+
+function manualError(message) {
+  $('#manualError').textContent = message;
+  $('#manualError').hidden = !message;
+}
+
+// Brukeren skriver bare IP-adressen; broen finner selv ut hvilket merke TV-en er.
+// Finner den ingenting, kan brukeren velge merke selv.
+$('#stepManual').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const host = $('#ip').value.trim();
+  if (!isPrivateIPv4(host)) {
+    manualError('Skriv en lokal IP-adresse, for eksempel 192.168.1.42.');
+    $('#ip').focus();
+    return;
+  }
+  manualError('');
+  const chosen = !$('#typeChoice').hidden && new FormData(event.currentTarget).get('deviceType');
+  if (chosen) {
+    beginConnect({ type: chosen, host, name: DEFAULT_NAMES[chosen] });
+    return;
+  }
+  const button = $('#manualSubmit');
+  button.disabled = true;
+  button.textContent = 'Finner TV-en …';
+  try {
+    const { device } = await api('probe', { host });
+    beginConnect(device);
+  } catch (error) {
+    manualError(`${error.message} Du kan også velge merke selv.`);
+    $('#typeChoice').hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = $('#typeChoice').hidden ? 'Finn TV-en' : 'Koble til';
+  }
+});
+$('#ip').addEventListener('input', () => manualError(''));
+
+// Viser tilkoblingssteget og kobler til. «repair» glemmer lagret nøkkel/sertifikat først (endret sertifikat).
+function beginConnect(device, { route = 'connect' } = {}) {
+  haptic();
+  connectState.target = device;
+  $('#pairCode').value = '';
+  $('#pairError').hidden = true;
+  showStep('pair');
+  startFastPoll();
+  connect(device, { userInitiated: false, route });
+  renderPairStep();
+}
+const needsRepair = () => state.code === 'cert-changed' || state.code === 'needs-repair';
+
+// Kodefeltet for Android TV, åpnet fra merknaden eller automatisk når boksen viser koden.
+function openPairFor(device) {
+  closeAllSheets();
+  connectState.target = device;
+  $('#connectView').hidden = false;
+  showStep('pair');
+  startFastPoll();
+  renderConnect();
+}
+
+let pairFocused = false;
+function renderPairStep() {
+  const target = connectState.target;
+  if (!target) return;
+  const badge = brandBadge(target.type);
+  badge.id = 'pairBrand';
+  $('#pairBrand').replaceWith(badge);
+  const isTarget = state.device && sameDevice(state.device, target);
+  const name = displayName(target, state.saved);
+  const needsCode = isTarget && state.code === 'needs-code';
+  const failed = isTarget && !state.connecting && !state.ready && !needsCode && noticeFor(state).tone === 'err';
+
+  if (isTarget && state.ready) {
+    showDone(name);
+    return;
+  }
+  $('#pairForm').hidden = !needsCode;
+  $('#pairRetry').hidden = !failed;
+  $('#pairSpinner').hidden = needsCode || failed;
+  if (needsCode) {
+    $('#pairTitle').textContent = 'Skriv inn koden';
+    $('#pairText').textContent = 'Koden vises nå på TV-skjermen.';
+    $('#pairStatus').textContent = '';
+    if (!pairFocused) {
+      pairFocused = true;
+      $('#pairCode').focus();
+    }
+    return;
+  }
+  pairFocused = false;
+  if (failed) {
+    const repair = needsRepair();
+    $('#pairTitle').textContent = repair ? 'Må pares på nytt' : 'Fikk ikke kontakt';
+    $('#pairText').textContent = state.message || 'TV-en svarte ikke.';
+    $('#pairStatus').textContent = repair ? '' : 'Telefonen og TV-en må være på samme Wi‑Fi.';
+    $('#pairAgain').textContent = repair ? 'Par på nytt' : 'Prøv igjen';
+    return;
+  }
+  $('#pairTitle').textContent = `Kobler til ${name}`;
+  $('#pairText').textContent = BRAND_GUIDE[target.type] || '';
+  $('#pairStatus').textContent = isTarget && state.message && !/^Kobler til/.test(state.message) ? state.message : '';
+}
+
+function showDone(name) {
+  if (connectState.step === 'done') return;
+  showStep('done');
+  $('#doneTitle').textContent = `Tilkoblet ${name}`;
+  haptic([10, 40, 10]);
+  connectState.doneTimer = setTimeout(() => {
+    closeConnect();
+    state.view = 'remote';
+    render();
+  }, 900);
+}
+
+$('#scanAgain').addEventListener('click', startScan);
+$('#manualOpen').addEventListener('click', () => {
+  showStep('manual');
+  $('#typeChoice').hidden = true;
+  $('#manualSubmit').textContent = 'Finn TV-en';
+  manualError('');
+  $('#ip').focus();
+});
+$('#pairAgain').addEventListener('click', () => {
+  const target = connectState.target;
+  if (!target) return;
+  const repair = needsRepair() && state.device && sameDevice(state.device, target);
+  beginConnect(target, { route: repair ? 'repair' : 'connect' });
+});
+// «Velg en annen TV»: avbryt tilkoblingen og gå tilbake til søket.
+$('#pairCancel').addEventListener('click', () => {
+  const target = connectState.target;
+  connectState.target = null;
+  if (target && state.device && sameDevice(target, state.device) && !state.ready) forgetActiveDevice();
+  showStep('search');
+  render();
+  startScan();
+});
+$('#connectBack').addEventListener('click', () => connectBack());
+function connectBack() {
+  if (connectState.step === 'manual') {
+    showStep('search');
+    renderConnect();
+    return true;
+  }
+  if (connectState.step === 'pair') {
+    $('#pairCancel').click();
+    return true;
+  }
+  if (state.device) {
+    closeConnect();
+    return true;
+  }
+  return false;
+}
+
+$('#pairCode').addEventListener('input', (event) => {
+  // Koden er heksadesimal: store bokstaver, bare 0–9 og A–F.
+  const input = event.currentTarget;
+  input.value = input.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 6);
+  $('#pairError').hidden = true;
+});
+function pairError(message) {
+  $('#pairError').textContent = message;
+  $('#pairError').hidden = false;
+}
+$('#pairForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const code = $('#pairCode').value.trim();
+  if (code.length !== 6) {
+    pairError('Koden er seks tegn, slik den vises på TV-en.');
+    $('#pairCode').focus();
+    return;
+  }
+  const button = $('#pairSubmit');
+  button.disabled = true;
+  button.textContent = 'Sjekker koden …';
+  try {
+    applyStatus(await api('pair', { code }));
+  } catch (error) {
+    pairError(error.message);
+    $('#pairCode').select();
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Par';
+    render();
+  }
+});
 
 // ---------- Handlinger ----------
 
@@ -529,7 +914,10 @@ async function connect(device, { userInitiated = true, route = 'connect' } = {})
   if (userInitiated) haptic();
   const attempt = ++state.connecting;
   // Samme TV på nytt (f.eks. «Prøv igjen»): appraden blir stående nedtonet til TV-en svarer.
-  if (!state.device || !sameDevice(state.device, device)) state.apps = [];
+  if (!state.device || !sameDevice(state.device, device)) {
+    state.apps = [];
+    inputsFor = null;
+  }
   state.device = device;
   state.ready = false;
   state.code = null;
@@ -576,6 +964,16 @@ async function refreshStatus() {
   loadApps();
 }
 
+// TV-en som er i bruk, glemmes: broen kobler fra, og den kommer ikke tilbake ved neste statusoppdatering.
+function forgetActiveDevice() {
+  const token = ++state.connecting;
+  Object.assign(state, { device: null, ready: false, code: null, message: '', capabilities: null, apps: [], appsFor: null, nowPlaying: null });
+  inputsFor = null;
+  storage.write('fjern-selected', null);
+  api('disconnect', {}).catch(() => {}).finally(() => { if (state.connecting === token) state.connecting = 0; });
+  renderNowPlaying();
+}
+
 function flash(button, className, ms) {
   if (!button) return;
   button.classList.remove('is-sent', 'is-failed');
@@ -619,7 +1017,7 @@ async function launch(app, button, { retry = false } = {}) {
   if (launching.has(app.id)) return;
   launching.add(app.id);
   haptic();
-  const label = button?.querySelector('.fav-label');
+  const label = button?.querySelector('.fav-label, .tile-name');
   const busy = setTimeout(() => {
     button?.classList.add('is-busy');
     button?.setAttribute('aria-busy', 'true');
@@ -635,11 +1033,6 @@ async function launch(app, button, { retry = false } = {}) {
     if (state.nowPlaying) {
       state.nowPlaying = null;
       renderNowPlaying();
-    }
-    // Engangshint: YouTube på TV-en er tungvint å søke i med fjernkontrollen.
-    if (/youtube/i.test(app.name) && !storage.read('fjern-hint-yt', false)) {
-      storage.write('fjern-hint-yt', true);
-      setTimeout(() => toast('Tips: Søk enklere fra mobilen med «Søk på YouTube» øverst.'), 600);
     }
   } catch (error) {
     flash(button, 'is-failed', 600);
@@ -680,28 +1073,85 @@ function bindKey(button) {
   });
 }
 
-async function scan() {
-  if (state.scanning) return;
-  state.scanning = true;
-  state.found = [];
-  renderLists();
-  try {
-    const answer = await api('scan', {});
-    state.found = (answer.devices || []).filter(isValidDevice);
-    if (!state.found.length) toast('Fant ingen TV. Prøv å legge til med IP.');
-  } catch (error) {
-    toast(error.message);
-  } finally {
-    state.scanning = false;
-    renderLists();
-  }
+// ---------- Berøringsflate ----------
+
+// Sveip gir piltaster (ett steg per 40 px, så et langt sveip gir flere), et kort trykk gir OK.
+// Kommandoene sendes i kø, så raske sveip ikke mister steg.
+const PAD_KEY = 'fjern-pad-mode';
+const SWIPE_STEP_PX = 40;
+const TAP_MAX_MS = 450;
+let touchQueue = Promise.resolve();
+let queued = 0;
+function sendQueued(key) {
+  if (queued >= 8) return;
+  queued += 1;
+  touchQueue = touchQueue.then(() => api('command', { key })).catch((error) => toast(error.message)).finally(() => { queued -= 1; });
 }
 
-function openDevices({ scanNow = false } = {}) {
-  renderLists();
-  $('#devicesSheet').showModal();
-  if (scanNow) scan();
+function setPadMode(mode) {
+  const touch = mode === 'touch';
+  $('#dpad').hidden = touch;
+  $('#touchpad').hidden = !touch;
+  $('.cluster').classList.toggle('is-touch', touch);
+  const toggle = $('#padMode');
+  toggle.setAttribute('aria-pressed', String(touch));
+  const label = touch ? 'Bytt til piltaster' : 'Bytt til berøringsflate';
+  toggle.setAttribute('aria-label', label);
+  toggle.title = label;
+  toggle.replaceChildren(svgIcon(touch ? 'dpad' : 'touch'));
+  storage.write(PAD_KEY, touch ? 'touch' : 'dpad');
 }
+$('#padMode').addEventListener('click', () => {
+  haptic(6);
+  setPadMode($('#touchpad').hidden ? 'touch' : 'dpad');
+});
+
+(() => {
+  const pad = $('#touchpad');
+  const dot = pad.querySelector('.touch-dot');
+  let gesture = null;
+  const place = (event) => {
+    const box = pad.getBoundingClientRect();
+    dot.style.transform = `translate(${event.clientX - box.left}px, ${event.clientY - box.top}px)`;
+  };
+  pad.addEventListener('pointerdown', (event) => {
+    if (!state.ready) {
+      toast(state.message || 'TV-en er ikke tilkoblet ennå.');
+      return;
+    }
+    pad.setPointerCapture(event.pointerId);
+    gesture = { x: event.clientX, y: event.clientY, t: Date.now(), moved: false };
+    place(event);
+    pad.classList.add('is-active');
+  });
+  pad.addEventListener('pointermove', (event) => {
+    if (!gesture) return;
+    place(event);
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_STEP_PX) return;
+    const key = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'Right' : 'Left') : (dy > 0 ? 'Down' : 'Up');
+    sendQueued(key);
+    haptic(6);
+    gesture.moved = true;
+    gesture.x = event.clientX;
+    gesture.y = event.clientY;
+  });
+  const end = (event) => {
+    if (!gesture) return;
+    if (event.type === 'pointerup' && !gesture.moved && Date.now() - gesture.t < TAP_MAX_MS) {
+      sendQueued('Select');
+      haptic();
+      flash(pad, 'is-sent', 200);
+    }
+    gesture = null;
+    pad.classList.remove('is-active');
+  };
+  pad.addEventListener('pointerup', end);
+  pad.addEventListener('pointercancel', end);
+})();
+
+// ---------- Strøm, navn, fjerning, logg ----------
 
 let renaming = null;
 function askRename(device) {
@@ -738,58 +1188,20 @@ function openPower() {
   $('#powerDialog').showModal();
 }
 
-// ---------- Oppkobling ----------
-
 $$('[data-key]').forEach(bindKey);
 $('#deviceButton').addEventListener('click', () => openDevices());
-$('#emptyScan').addEventListener('click', () => openDevices({ scanNow: true }));
-$('#emptyManual').addEventListener('click', () => $('#manualDialog').showModal());
-$('#scan').addEventListener('click', scan);
-$('#manualOpen').addEventListener('click', () => $('#manualDialog').showModal());
-$$('[data-close]').forEach((el) => el.addEventListener('click', () => closeSheet($(`#${el.dataset.close}`))));
+$('#addTv').addEventListener('click', () => {
+  closeSheet($('#devicesSheet'));
+  openConnect();
+});
+$$('[data-close]').forEach((node) => node.addEventListener('click', () => closeSheet($(`#${node.dataset.close}`))));
 
 $('#noticeAction').addEventListener('click', (event) => {
   if (!state.device) return;
   const action = event.currentTarget.dataset.action;
-  if (action === 'pair') openPair();
+  if (action === 'pair') openPairFor(state.device);
   else if (action === 'repair') connect(state.device, { route: 'repair' });
   else connect(state.device);
-});
-
-$('#pairCode').addEventListener('input', (event) => {
-  // Koden er heksadesimal: store bokstaver, bare 0–9 og A–F.
-  const input = event.currentTarget;
-  input.value = input.value.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 6);
-  $('#pairError').hidden = true;
-});
-// Feil vises rett under feltet, der brukeren ser.
-function pairError(message) {
-  $('#pairError').textContent = message;
-  $('#pairError').hidden = false;
-}
-$('#pairForm').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const code = $('#pairCode').value.trim();
-  if (code.length !== 6) {
-    pairError('Koden er seks tegn, slik den vises på TV-en.');
-    $('#pairCode').focus();
-    return;
-  }
-  const button = $('#pairSubmit');
-  button.disabled = true;
-  button.textContent = 'Sjekker koden …';
-  try {
-    applyStatus(await api('pair', { code }));
-    closeSheet($('#pairDialog'));
-    toast('Paret. Kobler til …');
-  } catch (error) {
-    pairError(error.message);
-    $('#pairCode').select();
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Par';
-    render();
-  }
 });
 
 $('#diagOpen').addEventListener('click', async () => {
@@ -831,42 +1243,20 @@ $('#renameForm').addEventListener('submit', (event) => {
   });
   persist();
   closeSheet($('#renameDialog'));
-  renderLists();
+  renderSavedList();
   render();
 });
 
 $('#removeConfirm').addEventListener('click', () => {
   if (removing) {
     state.saved = state.saved.filter((d) => !sameDevice(d, removing));
-    // TV-en som er i bruk: koble fra, så den ikke kommer tilbake ved neste statusoppdatering.
-    if (state.device && sameDevice(removing, state.device)) {
-      // Statusoppdateringer venter til broen har koblet fra (ellers kunne TV-en dukke opp igjen et øyeblikk).
-      const token = ++state.connecting;
-      Object.assign(state, { device: null, ready: false, code: null, message: '', capabilities: null, apps: [], appsFor: null, nowPlaying: null });
-      storage.write('fjern-selected', null);
-      api('disconnect', {}).catch(() => {}).finally(() => { if (state.connecting === token) state.connecting = 0; });
-      renderNowPlaying();
-      render();
-    }
+    if (state.device && sameDevice(removing, state.device)) forgetActiveDevice();
     persist();
-    renderLists();
+    renderSavedList();
+    render();
   }
   removing = null;
   closeSheet($('#removeDialog'));
-});
-
-$('#manualForm').addEventListener('submit', (event) => {
-  event.preventDefault();
-  const host = $('#ip').value.trim();
-  const type = new FormData(event.target).get('deviceType');
-  if (!isPrivateIPv4(host)) {
-    toast('Skriv en lokal IP-adresse, for eksempel 192.168.1.42.');
-    $('#ip').focus();
-    return;
-  }
-  closeSheet($('#manualDialog'));
-  closeSheet($('#devicesSheet'));
-  connect({ type, host, name: DEFAULT_NAMES[type] });
 });
 
 // «Skriv på TV» ligger i «Mer»; arket byttes uten animasjon så to ark ikke står oppå hverandre.
@@ -876,6 +1266,49 @@ $('#textOpen').addEventListener('click', () => {
   $('#tvText').focus();
 });
 $('#textBackspace').addEventListener('click', (event) => send('Backspace', event.currentTarget));
+$('#textForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const text = $('#tvText').value;
+  if (!text.trim()) {
+    $('#tvText').focus();
+    return;
+  }
+  try {
+    await api('text', { text });
+    $('#tvText').value = '';
+    toast('Tekst sendt til TV-en.');
+  } catch (error) {
+    toast(error.message);
+  }
+});
+$('#textEnter').addEventListener('click', (event) => send('Enter', event.currentTarget));
+
+$('#moreOpen').addEventListener('click', () => $('#moreSheet').showModal());
+$('#numOpen').addEventListener('click', () => {
+  $('#moreSheet').close();
+  $('#numSheet').showModal();
+});
+// Kilde: står nederst i Apper-fanen.
+$('#inputOpen').addEventListener('click', async () => {
+  $('#moreSheet').close();
+  switchView('apps');
+  await loadInputs({ force: true });
+  $('#inputsTitle').scrollIntoView({ block: 'start', behavior: reducedMotion.matches ? 'auto' : 'smooth' });
+});
+
+$('#powerOpen').addEventListener('click', openPower);
+$('#powerOff').addEventListener('click', () => {
+  closeSheet($('#powerDialog'));
+  send('PowerOff', $('#powerOpen'));
+});
+$('#powerOn').addEventListener('click', async () => {
+  closeSheet($('#powerDialog'));
+  if (await send('PowerOn', $('#powerOpen'), { requireReady: false })) {
+    toast('Slår på TV-en …');
+    refreshStatus();
+  }
+});
+
 // ---------- YouTube: søk på mobilen, spill av på TV-en ----------
 
 const RECENT_KEY = 'fjern-yt-recent';
@@ -889,10 +1322,8 @@ function renderRecent() {
   const showRecent = list.length > 0 && !$('#ytResults').children.length;
   $('#ytRecentBox').hidden = !showRecent;
   $('#ytRecent').replaceChildren(...list.map((query) => {
-    const chip = document.createElement('button');
+    const chip = el('button', 'chip', query);
     chip.type = 'button';
-    chip.className = 'chip';
-    chip.textContent = query;
     chip.addEventListener('click', () => {
       $('#ytQuery').value = query;
       runSearch(query);
@@ -902,8 +1333,7 @@ function renderRecent() {
 }
 
 function thumbnail(id, className) {
-  const box = document.createElement('span');
-  box.className = className;
+  const box = el('span', className);
   const img = document.createElement('img');
   img.alt = '';
   img.loading = 'lazy';
@@ -915,27 +1345,14 @@ function thumbnail(id, className) {
 }
 
 function videoRow(video) {
-  const li = document.createElement('li');
-  const button = document.createElement('button');
+  const li = el('li');
+  const button = el('button', 'yt-item');
   button.type = 'button';
-  button.className = 'yt-item';
   button.setAttribute('aria-label', `Spill ${video.title} på TV-en`);
   const thumb = thumbnail(video.id, 'yt-thumb');
-  if (video.duration) {
-    const badge = document.createElement('span');
-    badge.className = video.duration === 'Direkte' ? 'yt-duration live' : 'yt-duration';
-    badge.textContent = video.duration;
-    thumb.append(badge);
-  }
-  const textBox = document.createElement('span');
-  textBox.className = 'yt-text';
-  const title = document.createElement('span');
-  title.className = 'yt-title';
-  title.textContent = video.title;
-  const meta = document.createElement('span');
-  meta.className = 'yt-meta';
-  meta.textContent = [video.channel, video.views].filter(Boolean).join(' · ');
-  textBox.append(title, meta);
+  if (video.duration) thumb.append(el('span', video.duration === 'Direkte' ? 'yt-duration live' : 'yt-duration', video.duration));
+  const textBox = el('span', 'yt-text');
+  textBox.append(el('span', 'yt-title', video.title), el('span', 'yt-meta', [video.channel, video.views].filter(Boolean).join(' · ')));
   button.append(thumb, textBox);
   button.addEventListener('click', () => playVideo(video, button));
   li.append(button);
@@ -947,9 +1364,8 @@ async function playVideo(video, button) {
   button?.classList.add('is-playing');
   try {
     await api('ytplay', { id: video.id });
-    state.nowPlaying = video;
+    state.nowPlaying = video; // «Spilles nå»-linjen er bekreftelsen
     renderNowPlaying();
-    toast('Spilles på TV-en.');
   } catch (error) {
     toast(error.message);
   } finally {
@@ -984,14 +1400,11 @@ function hideSuggestions() {
 function renderSuggestions(list) {
   $('#ytSuggest').hidden = list.length === 0;
   $('#ytSuggest').replaceChildren(...list.map((text) => {
-    const li = document.createElement('li');
-    const button = document.createElement('button');
+    const li = el('li');
+    const button = el('button', 'yt-suggestion');
     button.type = 'button';
-    button.className = 'yt-suggestion';
     button.setAttribute('aria-label', `Søk etter ${text}`);
-    const label = document.createElement('span');
-    label.textContent = text;
-    button.append(svgIcon('search'), label);
+    button.append(svgIcon('search'), el('span', '', text));
     button.addEventListener('click', () => {
       $('#ytQuery').value = text;
       runSearch(text);
@@ -1025,7 +1438,7 @@ async function runSearch(query, { live = false } = {}) {
   const show = (videos) => {
     $('#ytStatus').textContent = videos.length ? '' : `Ingen treff for «${q}».`;
     $('#ytResults').replaceChildren(...videos.map(videoRow));
-    $('.ytview-body').scrollTop = 0;
+    if (!live) $('#ytView').scrollTop = 0;
   };
   const cached = resultCache.get(q);
   if (cached) return show(cached);
@@ -1060,33 +1473,25 @@ function onQueryInput() {
   liveTimer = setTimeout(() => runSearch(q, { live: true }), LIVE_DELAY);
 }
 
-// «Spilles nå»: liten linje med det som går på TV-en, både på forsiden og i YouTube-visningen.
+// «Spilles nå»: liten linje med det som går på TV-en, både på fjernkontrollen og i YouTube-fanen.
 function nowBar(target) {
   const video = state.nowPlaying;
   target.hidden = !video;
   if (!video) return target.replaceChildren();
-  const open = document.createElement('button');
+  const open = el('button', 'nowbar-main');
   open.type = 'button';
-  open.className = 'nowbar-main';
   open.setAttribute('aria-label', `Spilles nå: ${video.title}`);
-  const label = document.createElement('span');
-  label.className = 'nowbar-text';
-  const small = document.createElement('small');
-  small.textContent = 'Spilles nå';
-  const title = document.createElement('span');
-  title.textContent = video.title;
-  label.append(small, title);
+  const label = el('span', 'nowbar-text');
+  label.append(el('small', '', 'Spilles nå'), el('span', '', video.title));
   open.append(thumbnail(video.id, 'nowbar-thumb'), label);
-  open.addEventListener('click', () => (target.id === 'nowYt' ? closeYouTube() : openYouTube()));
-  const play = document.createElement('button');
+  open.addEventListener('click', () => switchView(target.id === 'nowYt' ? 'remote' : 'yt'));
+  const play = el('button', 'nowbar-action');
   play.type = 'button';
-  play.className = 'nowbar-action';
   play.setAttribute('aria-label', 'Spill av / pause');
   play.append(svgIcon('playpause'));
   play.addEventListener('click', () => send('PlayPause', play));
-  const close = document.createElement('button');
+  const close = el('button', 'nowbar-action');
   close.type = 'button';
-  close.className = 'nowbar-action';
   close.setAttribute('aria-label', 'Skjul «Spilles nå»');
   close.append(svgIcon('close'));
   close.addEventListener('click', () => {
@@ -1098,18 +1503,11 @@ function nowBar(target) {
 function renderNowPlaying() {
   nowBar($('#nowHome'));
   nowBar($('#nowYt'));
+  showNowHome();
 }
-
-function openYouTube({ focus = true } = {}) {
-  $('#ytView').hidden = false;
-  document.body.classList.add('yt-open');
-  renderRecent();
-  renderNowPlaying();
-  if (focus && !$('#ytResults').children.length) $('#ytQuery').focus();
-}
-function closeYouTube() {
-  $('#ytView').hidden = true;
-  document.body.classList.remove('yt-open');
+// Uten forbindelse kan «Spilles nå» ikke styre noe, og fjernkontrollen trenger plassen til merknaden.
+function showNowHome() {
+  $('#nowHome').hidden = !state.nowPlaying || !state.ready;
 }
 
 // Talesøk: Android-appen bruker telefonens talegjenkjenning; Chrome har sin egen.
@@ -1144,7 +1542,7 @@ function listen() {
 }
 
 async function voiceSearch() {
-  openYouTube({ focus: false });
+  switchView('yt');
   $('#ytStatus').textContent = 'Lytter … si hva du vil se.';
   const text = (await listen()).trim();
   if (!text) {
@@ -1155,11 +1553,6 @@ async function voiceSearch() {
   runSearch(text);
 }
 
-$('#searchOpen').addEventListener('click', (event) => {
-  if (event.target.closest('#searchPillMic')) voiceSearch();
-  else openYouTube();
-});
-$('#ytBack').addEventListener('click', closeYouTube);
 $('#ytMic').addEventListener('click', voiceSearch);
 $('#ytForm').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -1171,81 +1564,8 @@ $('#ytRecentClear').addEventListener('click', () => {
   renderRecent();
 });
 $('#ytMic').hidden = !voiceAvailable;
-$('#searchPillMic').hidden = !voiceAvailable;
 
-// ---------- Skriv på TV ----------
-
-// Teksten skrives i feltet som er åpent på TV-en; arket blir stående for mer skriving.
-$('#textForm').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const text = $('#tvText').value;
-  if (!text.trim()) {
-    $('#tvText').focus();
-    return;
-  }
-  try {
-    await api('text', { text });
-    $('#tvText').value = '';
-    toast('Tekst sendt til TV-en.');
-  } catch (error) {
-    toast(error.message);
-  }
-});
-$('#textEnter').addEventListener('click', (event) => send('Enter', event.currentTarget));
-
-$('#numOpen').addEventListener('click', () => $('#numSheet').showModal());
-$('#moreOpen').addEventListener('click', () => $('#moreSheet').showModal());
-$('#inputOpen').addEventListener('click', async () => {
-  const list = $('#inputList');
-  list.replaceChildren(emptyItem('Henter innganger …'));
-  $('#inputSheet').showModal();
-  try {
-    const { inputs } = await api('inputs');
-    list.replaceChildren(...(inputs.length ? inputs.map(inputRow) : [emptyItem('Fant ingen innganger på TV-en.')]));
-  } catch (error) {
-    list.replaceChildren(emptyItem(error.message));
-  }
-});
-
-function inputRow(input) {
-  const li = document.createElement('li');
-  li.className = 'app-row';
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'app-open';
-  if (!input.connected) button.classList.add('is-disconnected');
-  const icon = document.createElement('span');
-  icon.className = 'app-icon s all';
-  icon.setAttribute('aria-hidden', 'true');
-  icon.append(svgIcon('hdmi'));
-  const name = document.createElement('span');
-  name.textContent = input.connected ? input.name : `${input.name} (ikke tilkoblet)`;
-  button.append(icon, name);
-  button.addEventListener('click', async () => {
-    try {
-      await api('input', { id: input.id });
-      closeSheet($('#inputSheet'));
-      toast(`Bytter til ${input.name}.`);
-    } catch (error) {
-      toast(error.message);
-    }
-  });
-  li.append(button);
-  return li;
-}
-
-$('#powerOpen').addEventListener('click', openPower);
-$('#powerOff').addEventListener('click', () => {
-  closeSheet($('#powerDialog'));
-  send('PowerOff', $('#powerOpen'));
-});
-$('#powerOn').addEventListener('click', async () => {
-  closeSheet($('#powerDialog'));
-  if (await send('PowerOn', $('#powerOpen'), { requireReady: false })) {
-    toast('Slår på TV-en …');
-    refreshStatus();
-  }
-});
+// ---------- Tastatur, status, tilbake ----------
 
 const KEYBOARD = {
   ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Select', Backspace: 'Back',
@@ -1253,7 +1573,7 @@ const KEYBOARD = {
   ...Object.fromEntries(Array.from({ length: 10 }, (_, n) => [String(n), `Num${n}`])),
 };
 document.addEventListener('keydown', (event) => {
-  if (document.querySelector('dialog[open]') || !$('#ytView').hidden || event.target.closest('input, textarea, select')) return;
+  if (document.querySelector('dialog[open]') || state.view !== 'remote' || !$('#connectView').hidden || event.target.closest('input, textarea, select')) return;
   // Enter på en fokusert knapp skal trykke den knappen, ikke sende OK til TV-en.
   if ((event.key === 'Enter' || event.key === ' ') && event.target.closest('button, summary')) return;
   const key = KEYBOARD[event.key];
@@ -1272,19 +1592,25 @@ function startPolling() {
   pollTimer = setInterval(refreshStatus, POLL_MS);
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) clearInterval(pollTimer);
-  else startPolling();
+  if (document.hidden) {
+    clearInterval(pollTimer);
+    stopFastPoll();
+  } else {
+    startPolling();
+    if (connectState.step === 'pair') startFastPoll();
+  }
 });
 
-// Android-tilbakeknappen lukker først et åpent ark.
+// Android-tilbakeknappen: først åpent ark, så tilkoblingsskjermen, så tilbake til fjernkontrollen.
 window.__fjernBack = () => {
   const open = document.querySelector('dialog[open]');
   if (open) {
     closeSheet(open);
     return true;
   }
-  if (!$('#ytView').hidden) {
-    closeYouTube();
+  if (!$('#connectView').hidden) return connectBack();
+  if (state.view !== 'remote') {
+    switchView('remote');
     return true;
   }
   return false;
@@ -1295,6 +1621,9 @@ if (!native && 'serviceWorker' in navigator) navigator.serviceWorker.register('/
 state.saved = storage.read('fjern-devices', []).filter(isValidDevice).map((d) => ({ ...d, name: normalizeName(d) }));
 const lastSelected = storage.read('fjern-selected', null);
 const previous = state.saved.find((d) => `${d.type}:${d.host}` === lastSelected);
+setPadMode(storage.read(PAD_KEY, 'dpad'));
+// Forrige TV vises med en gang (og kobles til under), så tilkoblingsskjermen ikke blinker forbi.
+if (previous) state.device = previous;
 render();
 if (previous) connect(previous, { userInitiated: false }).then(startPolling);
 else startPolling();

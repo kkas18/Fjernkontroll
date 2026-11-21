@@ -8,7 +8,7 @@ Android-appen har broen innebygd, så du trenger verken Termux eller Node.
 
 1. Last ned `Fjern-<versjon>.apk` til telefonen. Nyeste bygg ligger under **Actions → CI → siste kjøring → Artifacts** på GitHub.
 2. Åpne filen. Android spør første gang om du vil tillate installasjon fra denne kilden (for eksempel Chrome eller Filer). Tillat, og trykk **Installer**.
-3. Åpne **Fjern**. Telefon og TV må være på samme Wi‑Fi. Trykk **Søk etter TV**, eller legg til TV-en med IP-adresse.
+3. Åpne **Fjern**. Telefon og TV må være på samme Wi‑Fi. Appen søker etter TV-er med en gang: trykk på din. Finner den ingen, trykk **Skriv inn IP-adresse**. Merket finner appen selv.
 
 Krever Android 8.0 eller nyere. Nye versjoner installeres over den gamle, og lagrede TV-er og paringer beholdes.
 
@@ -28,7 +28,7 @@ Krever Android 8.0 eller nyere. Nye versjoner installeres over den gamle, og lag
    Er repoet privat, kan du i stedet laste ned ZIP fra GitHub (**Code → Download ZIP**) og pakke den ut med `unzip -o ~/storage/downloads/Fjernkontroll-main.zip -d ~` etter `termux-setup-storage`.
 
 3. Åpne **Chrome** på `http://localhost:8765`, trykk **⋮ → Installer app**.
-4. Telefon og TV må være på samme Wi‑Fi. Trykk **Søk etter TV**, eller legg til TV-en med IP-adresse.
+4. Telefon og TV må være på samme Wi‑Fi. Appen søker etter TV-er med en gang: trykk på din, eller skriv inn IP-adressen.
 
 Neste gang: åpne Termux, kjør `cd ~/fjern && npm start`, og start Fjern fra hjemskjermen. Tillat Termux å kjøre i bakgrunnen i Androids batteriinnstillinger, ellers kan broen bli stoppet.
 
@@ -36,10 +36,12 @@ Oppdater med `cd ~/fjern && git pull`.
 
 ## Funksjoner
 
-- Navigasjon, OK, Hjem, Tilbake, volum, kanal (skjules på Roku-spillere uten TV), lyd av og avspilling. Hold inne piler og volum for å gjenta.
-- **Apper:** snarveier til appene på TV-en, hentet direkte fra TV-en. Favorittene står på én rad på forsiden: 4 på vanlige telefoner og 5 på brede, i tillegg til «Alle apper». I «Alle apper» velger du dem med stjernen. Der står favorittene øverst med teller, og du får beskjed når raden er full. Mens en app startes, viser flisen «Åpner …».
+- **Enkel tilkobling til hvilken som helst TV:** Appen søker etter TV-er på Wi‑Fi med en gang og viser dem som kort med merke, navn og adresse. Trykk på en, så får du veiledning for akkurat det merket: «Godta» på LG, «Tillat» på Samsung, kode på Android TV, ingenting på Roku. Med **Skriv inn IP-adresse** trenger du bare adressen: broen sjekker selv om det er Roku, Samsung, Android TV eller LG (`/api/probe`). Kjenner den ikke igjen TV-en, kan du velge merke selv. Lagrede TV-er står også i listen, selv når søket ikke finner dem.
+- **Tre faner nederst:** *Fjernkontroll*, *Apper* og *YouTube*. TV-velgeren og strømknappen står øverst.
+- **Fjernkontroll:** navigasjon med OK, eller en **berøringsflate** (bytt med knappen i hjørnet; valget huskes). På flaten sveiper du for piltaster, ett steg per 40 px, og trykker for OK. Under den står Tilbake, Hjem, Mer, volum, lyd av, kanal (skjules på Roku-spillere uten TV) og avspilling. Hold inne piler og volum for å gjenta.
+- **Apper:** favorittene står på én rad på fjernkontrollen: 4 på vanlige telefoner og 5 på brede, i tillegg til «Alle». Apper-fanen viser alle appene som ikoner, med søk når det er mange, og **Velg favoritter** for å bytte hvilke som står på fjernkontrollen. Du får beskjed når raden er full. Mens en app startes, viser flisen «Åpner …». Kilder (HDMI) står nederst i Apper-fanen, og under **Mer → Kilde**.
 - **Slå på og av:** Roku-TV-er slås på med `PowerOn`. LG slås på med Wake-on-LAN når TV-en har vært tilkoblet én gang og **Slå på via Wi‑Fi** er aktivert på TV-en (ofte under *Mobil TV på*; plasseringen varierer per modell).
-- **YouTube:** trykk på «Søk på YouTube» øverst (eller 🎤 for talesøk), og se resultatene med bilder på mobilen. Treffene og forslag til søkeord kommer mens du skriver, uten å trykke Søk. Trykk på en video, så spilles den på TV-en, og «Spilles nå» viser hva som går. Søket leser YouTubes offentlige søkeside gjennom broen, og forslagene kommer fra Googles forslagstjeneste. Ingen konto eller API-nøkkel trengs. Talesøk bruker telefonens egen talegjenkjenning i Android-appen, og Chromes i nettversjonen.
+- **YouTube:** søk i YouTube-fanen (eller 🎤 for talesøk), og se resultatene med bilder på mobilen. Treffene og forslag til søkeord kommer mens du skriver, uten å trykke Søk. Trykk på en video, så spilles den på TV-en, og «Spilles nå» viser hva som går, både i fanen og på fjernkontrollen. Søket leser YouTubes offentlige søkeside gjennom broen, og forslagene kommer fra Googles forslagstjeneste. Ingen konto eller API-nøkkel trengs. Talesøk bruker telefonens egen talegjenkjenning i Android-appen, og Chromes i nettversjonen.
 - **Skriv på TV** (under **Mer**): skriv i tekstfeltet som er åpent på TV-en, for eksempel et passord, og slett tegn eller trykk Enter.
 - **Automatisk gjenoppkobling** for LG når forbindelsen faller ut, og helsesjekk for Roku.
 
@@ -99,9 +101,10 @@ npm run verify   # syntakssjekk + tester (kjøres også i CI)
 npm run check:ui # grensesnittest i ekte nettleser (krever playwright-core og Chrome; kjøres i CI)
 ```
 
-`npm run check:ui` (`scripts/ui-check.mjs`) kjører grensesnittet mot en falsk bro. Den sjekker forsiden for alle TV-typer, seks telefonstørrelser (fra 320×568 til 412×915) og tre tilstander: enkel, full (9 favoritter og «Spilles nå») og frakoblet.
-- **Oppsett:** ingen overlapping, ingen rulling og ingenting utenfor skjermen. Alle knapper er minst 40 px, og favorittene står på én rad.
-- **Funksjoner:** app-ikonene står fast mellom statusoppdateringer, favorittraden har tak, flisen viser «Åpner …», og appraden blir stående nedtonet ved frakobling. Fjerner du TV-en som er i bruk, kobles den fra.
+`npm run check:ui` (`scripts/ui-check.mjs`) kjører grensesnittet mot en falsk bro (146 sjekker). Med `SHOTS=<mappe>` lagres også skjermbilder av alle skjermene.
+- **Oppsett:** fjernkontrollen for alle TV-typer, fem telefonstørrelser (fra 320×568 til 412×915) og fire tilstander: enkel, full (9 favoritter og «Spilles nå»), frakoblet og berøringsflate. Ingen overlapping, ingen rulling og ingenting utenfor skjermen. Alle knapper er minst 40 px, styrekorset minst 140 px, bytteknappen ligger utenfor sirkelen, og favorittene står på én rad.
+- **Tilkobling:** søk ved første oppstart, trykk på funnet TV med veiledning per merke, Android TV-kode (filtrering, feil og riktig kode), IP-adresse med automatisk merke, merkevalg når TV-en ikke gjenkjennes, «Fikk ikke kontakt» med «Velg en annen TV», og endret sertifikat med «Par på nytt».
+- **Funksjoner:** faner og tilbakeknapp, app-ikonene står fast mellom statusoppdateringer, favoritter med tak, «Åpner …», berøringsflaten (sveip og trykk), kilder, tastatur, frakoblet tilstand og fjerning av TV-en som er i bruk.
 
 | Mappe | Innhold |
 | --- | --- |
@@ -121,7 +124,7 @@ cd android
 
 APK-en signeres med debug-nøkkelen i `android/app/debug.keystore`. Den er offentlig etter Android-konvensjon, og gjør at alle bygg kan installeres over hverandre. For distribusjon utenfor egen telefon: legg en egen nøkkel i repo-hemmelighetene `FJERN_KEYSTORE_BASE64`, `FJERN_KEYSTORE_PASSWORD`, `FJERN_KEY_ALIAS` og `FJERN_KEY_PASSWORD`, så bruker CI den. Byttes nøkkelen, må appen avinstalleres én gang.
 
-API-et (`/api/status`, `/api/scan`, `/api/connect`, `/api/command`, `/api/text`) er bare ment for appen selv.
+API-et (`/api/status`, `/api/scan`, `/api/probe`, `/api/connect`, `/api/command`, `/api/text` med flere) er bare ment for appen selv.
 
 Endrer du filer i `public/`, øk `version` i `package.json` og `CACHE` i `public/sw.js` til samme verdi. En test feiler hvis de ikke stemmer overens.
 
